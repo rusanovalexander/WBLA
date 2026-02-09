@@ -71,7 +71,7 @@ from ui.components.agent_dashboard import render_agent_dashboard
 # =============================================================================
 
 st.set_page_config(
-    page_title=f"Credit Pack PoC v{VERSION}",
+    page_title=f"CP PoC v{VERSION}",
     page_icon="🏦",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -215,7 +215,7 @@ Answer concisely and helpfully.
 # =============================================================================
 
 def render_phase_setup():
-    st.header("🏦 Credit Pack System")
+    st.header("🏦 CPS")
     st.subheader(f"v{VERSION} — Autonomous Multi-Agent System")
 
     if st.session_state.rag_ok is None:
