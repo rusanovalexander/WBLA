@@ -1,5 +1,191 @@
-Compliance extraction failed. Last LLM output (first 1000 chars): <json_output>
+All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 42 (char 254). JSON string (first 300 chars): [
 
-[]
+  {
 
-</json_output>
+    "category": "Purpose of Application",
+
+    "fields": [
+
+      {
+
+        "id": 1,
+
+        "name": "Purpose of the Loan",
+
+        "description": "A clear statement defining the use of the requested funds.",
+
+        "why_required": "Procedure item 'i' requires information on the loan's purpose 
+
+All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 42 (char 254). JSON string (first 300 chars): [
+
+  {
+
+    "category": "Purpose of Application",
+
+    "fields": [
+
+      {
+
+        "id": 1,
+
+        "name": "Purpose of the Loan",
+
+        "description": "A clear statement defining the use of the requested funds.",
+
+        "why_required": "Procedure item 'i' requires information on the loan's purpose 
+
+All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 42 (char 254). JSON string (first 300 chars): [
+
+  {
+
+    "category": "Purpose of Application",
+
+    "fields": [
+
+      {
+
+        "id": 1,
+
+        "name": "Purpose of the Loan",
+
+        "description": "A clear statement defining the use of the requested funds.",
+
+        "why_required": "Procedure item 'i' requires information on the loan's purpose 
+
+Could not parse JSON from LLM output (7010 chars). First 500 chars:
+
+<json_output>
+
+[
+
+  {
+
+    "category": "Purpose of Application",
+
+    "fields": [
+
+      {
+
+        "id": 1,
+
+        "name": "Purpose of the Loan",
+
+        "description": "A clear statement defining the use of the requested funds.",
+
+        "why_required": "Procedure item 'i' requires information on the loan's purpose for all credit applications. This is an acquisition financing for the Polderzicht Retailpark.",
+
+        "priority": "CRITICAL",
+
+        "typical_source": "Sponsor"
+
+      },
+
+      {
+
+     
+
+[...]
+
+Last 200 chars:
+
+ning Report",
+
+        "description": "Official documentation and/or a legal opinion on the asset's zoning.",
+
+        "why_required": "The deal analysis highlights a 'rare' and favorable zoning plan as
+
+All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 42 (char 254). JSON string (first 300 chars): [
+
+  {
+
+    "category": "Purpose of Application",
+
+    "fields": [
+
+      {
+
+        "id": 1,
+
+        "name": "Purpose of the Loan",
+
+        "description": "A clear statement defining the use of the requested funds.",
+
+        "why_required": "Procedure item 'i' requires information on the loan's purpose 
+
+All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 42 (char 254). JSON string (first 300 chars): [
+
+  {
+
+    "category": "Purpose of Application",
+
+    "fields": [
+
+      {
+
+        "id": 1,
+
+        "name": "Purpose of the Loan",
+
+        "description": "A clear statement defining the use of the requested funds.",
+
+        "why_required": "Procedure item 'i' requires information on the loan's purpose 
+
+All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 42 (char 254). JSON string (first 300 chars): [
+
+  {
+
+    "category": "Purpose of Application",
+
+    "fields": [
+
+      {
+
+        "id": 1,
+
+        "name": "Purpose of the Loan",
+
+        "description": "A clear statement defining the use of the requested funds.",
+
+        "why_required": "Procedure item 'i' requires information on the loan's purpose 
+
+Could not parse JSON from LLM output (7010 chars). First 500 chars:
+
+<json_output>
+
+[
+
+  {
+
+    "category": "Purpose of Application",
+
+    "fields": [
+
+      {
+
+        "id": 1,
+
+        "name": "Purpose of the Loan",
+
+        "description": "A clear statement defining the use of the requested funds.",
+
+        "why_required": "Procedure item 'i' requires information on the loan's purpose for all credit applications. This is an acquisition financing for the Polderzicht Retailpark.",
+
+        "priority": "CRITICAL",
+
+        "typical_source": "Sponsor"
+
+      },
+
+      {
+
+     
+
+[...]
+
+Last 200 chars:
+
+ning Report",
+
+        "description": "Official documentation and/or a legal opinion on the asset's zoning.",
+
+        "why_required": "The deal analysis highlights a 'rare' and favorable zoning plan as
