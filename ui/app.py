@@ -40,6 +40,7 @@ from tools.change_tracker import ChangeLog
 from tools.phase_manager import PhaseManager
 from agents import (
     ORCHESTRATOR_INSTRUCTION,
+    get_orchestrator_instruction,
     AgentCommunicationBus,
     create_process_analyst_responder,
     create_compliance_advisor_responder,
@@ -188,7 +189,10 @@ Origination Method: {st.session_state.origination_method}
     if st.session_state.compliance_result:
         context += f"\nCompliance (excerpt):\n{st.session_state.compliance_result[:2000]}"
 
-    prompt = f"""{ORCHESTRATOR_INSTRUCTION}
+    gov_ctx = st.session_state.get("governance_context")
+    orchestrator_instr = get_orchestrator_instruction(gov_ctx)
+
+    prompt = f"""{orchestrator_instr}
 
 ## CONTEXT
 {context}
@@ -1188,16 +1192,11 @@ def _generate_alternative_terms(requirement_name: str) -> list[str]:
         "sponsor": ["backer", "equity provider", "investor", "fund manager"],
     }
 
-    # Merge governance terms into term_map (governance takes priority)
+    # Merge governance terms into term_map (governance REPLACES defaults)
     for key, synonyms in gov_terms.items():
-        if key in term_map:
-            # Extend existing entry with governance synonyms
-            existing = set(s.lower() for s in term_map[key])
-            for s in synonyms:
-                if s.lower() not in existing:
-                    term_map[key].append(s)
-        else:
-            term_map[key] = synonyms
+        # Governance-discovered synonyms fully replace hardcoded defaults
+        # This ensures document-driven terminology wins over generic fallbacks
+        term_map[key] = synonyms
     
     alternatives = []
     name_lower = requirement_name.lower()

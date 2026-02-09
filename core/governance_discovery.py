@@ -29,18 +29,18 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 PROCEDURE_QUERIES = [
-    "information requirements for credit assessment origination methods",
-    "required sections content structure credit pack document",
-    "assessment approach types available and decision criteria",
-    "origination methods types available and when each applies",
-    "deal classification categories asset types transaction types",
+    "information requirements assessment methods origination",
+    "required sections content structure output document",
+    "assessment approach types available decision criteria",
+    "origination methods types available when each applies",
+    "classification categories types dimensions taxonomy",
 ]
 
 GUIDELINES_QUERIES = [
-    "compliance criteria categories credit granting requirements",
-    "risk categories risk assessment framework",
-    "financial ratio requirements thresholds limits",
-    "security collateral requirements structural requirements",
+    "compliance criteria categories requirements",
+    "risk categories risk assessment framework appetite",
+    "financial ratio requirements thresholds limits covenants",
+    "security collateral requirements structural provisions",
 ]
 
 
@@ -63,28 +63,29 @@ Extract the following from the excerpts above. Only include items that are
 explicitly mentioned or clearly implied. Do NOT invent items.
 
 1. **requirement_categories** — What categories of information does the Procedure
-   say must be collected? (e.g., "Deal Information", "Borrower Details",
-   "Financial Analysis", "Security Package", etc.)
+   say must be collected? (e.g., "Category A", "Category B", etc. — use exact
+   names from the document)
 
 2. **compliance_framework** — What categories of compliance criteria does the
-   Guidelines document define? (e.g., "Credit Granting Criteria",
-   "Security Requirements", "Concentration Limits", etc.)
+   Guidelines document define? (e.g., "Criteria Group 1", "Criteria Group 2",
+   etc. — use exact names from the document)
 
 3. **section_templates** — For each origination method mentioned, what sections
-   does the Procedure say must be included in the credit pack?
-   Format: {{"origination_method_name": [{{"name": "Section Name", "description": "..."}}]}}
+   does the Procedure say must be included in the output document?
+   Format: {{"method_name": [{{"name": "Section Name", "description": "..."}}]}}
 
 4. **risk_taxonomy** — What risk categories does the governance framework use?
-   (e.g., "Credit Risk", "Market Risk", "Operational Risk", etc.)
+   (use exact category names from the document)
 
 5. **deal_taxonomy** — What classification dimensions are used?
-   Format: {{"transaction_type": ["new", ...], "asset_class": ["office", ...], ...}}
+   Format: {{"dimension_name": ["value1", "value2", ...], ...}}
+   (use exact dimension names and values from the document)
 
 6. **terminology_map** — Key domain terms and their synonyms used in the documents.
    Format: {{"term": ["synonym1", "synonym2"]}}
 
 7. **search_vocabulary** — Key terms and phrases that appear frequently in the
-   documents, useful for future RAG searches.
+   documents, useful for future searches.
 
 ## OUTPUT FORMAT
 

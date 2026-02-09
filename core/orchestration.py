@@ -1200,6 +1200,38 @@ Remember:
                 response=response[:500],
             ))
 
+        # AG-F1: Feed agent responses back into a refinement call
+        if agent_queries_used:
+            tracer.record("Writer", "REFINEMENT", f"Refining draft with {len(agent_queries_used)} agent responses")
+            agent_responses_text = "\n\n".join(
+                f"**From {aq.to_agent}** (re: {aq.query[:80]}):\n{aq.response}"
+                for aq in agent_queries_used
+            )
+            refinement_prompt = f"""{writer_instr}
+
+## SECTION TO REFINE: {section_name}
+
+## YOUR INITIAL DRAFT
+{result.text[:6000]}
+
+## AGENT RESPONSES TO YOUR QUERIES
+{agent_responses_text}
+
+## INSTRUCTIONS
+Refine your draft by incorporating the information from the agent responses above.
+- Integrate the new information naturally into the section
+- Keep the same structure and style
+- Output ONLY the refined section text — no metadata or thinking
+"""
+            refined = call_llm_streaming(
+                refinement_prompt, MODEL_PRO, 0.2, 8000, "Writer", tracer=tracer
+            )
+            if refined.success and len(refined.text.strip()) > 100:
+                tracer.record("Writer", "REFINEMENT_OK", f"Refined draft: {len(refined.text)} chars")
+                result = refined
+            else:
+                tracer.record("Writer", "REFINEMENT_SKIP", "Refinement output insufficient, using original")
+
     draft_content = result.text
     if "### 📝 DRAFTED SECTION" in draft_content:
         parts = draft_content.split("### 📝 DRAFTED SECTION")

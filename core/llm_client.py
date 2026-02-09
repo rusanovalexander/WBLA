@@ -288,6 +288,48 @@ def call_llm_with_backoff(
 # Streaming LLM Call
 # =============================================================================
 
+@retry(
+    retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    reraise=True,
+)
+def _call_gemini_streaming(
+    prompt: str,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    on_chunk: Callable[[str], None] | None = None,
+) -> str:
+    """
+    Raw Gemini streaming API call with retry.
+
+    Returns the concatenated response text. Retryable exceptions
+    (429, 503, timeout, etc.) are retried by tenacity.
+    """
+    from google.genai import types
+
+    client = _get_client()
+
+    config = types.GenerateContentConfig(
+        temperature=temperature,
+        max_output_tokens=max_tokens,
+    )
+
+    chunks: list[str] = []
+    for chunk in client.models.generate_content_stream(
+        model=model,
+        contents=prompt,
+        config=config,
+    ):
+        if chunk.text:
+            chunks.append(chunk.text)
+            if on_chunk:
+                on_chunk(chunk.text)
+
+    return "".join(chunks)
+
+
 def call_llm_streaming(
     prompt: str,
     model: str = MODEL_PRO,
@@ -320,27 +362,14 @@ def call_llm_streaming(
 
     with tracer.trace_llm_call(agent_name, model, prompt) as ctx:
         try:
-            from google.genai import types
-
-            client = _get_client()
-
-            config = types.GenerateContentConfig(
+            result_text = _call_gemini_streaming(
+                prompt=prompt,
+                model=model,
                 temperature=temperature,
-                max_output_tokens=max_tokens,
+                max_tokens=max_tokens,
+                on_chunk=on_chunk,
             )
 
-            chunks: list[str] = []
-            for chunk in client.models.generate_content_stream(
-                model=model,
-                contents=prompt,
-                config=config,
-            ):
-                if chunk.text:
-                    chunks.append(chunk.text)
-                    if on_chunk:
-                        on_chunk(chunk.text)
-
-            result_text = "".join(chunks)
             ctx["response_text"] = result_text
             ctx["tokens_in"] = estimate_tokens(prompt)
             ctx["tokens_out"] = estimate_tokens(result_text)
@@ -353,6 +382,9 @@ def call_llm_streaming(
                 agent_name=agent_name,
                 success=True,
             )
+
+        except RETRYABLE_EXCEPTIONS:
+            raise  # Let tenacity handle retry
 
         except Exception as e:
             error_msg = f"[LLM ERROR: {type(e).__name__}: {e}]"
