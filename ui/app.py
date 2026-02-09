@@ -1455,16 +1455,37 @@ def render_phase_compliance():
     if not st.session_state.compliance_result:
         if st.button("🔍 Run Agentic Compliance Check", type="primary", use_container_width=True):
             with st.spinner("Compliance Advisor searching Guidelines and assessing deal..."):
+                # Wrap search function to capture RAG evidence
+                rag_evidence = []
+
+                def _logging_search_guidelines(query, num_results=5):
+                    result = tool_search_guidelines(query, num_results)
+                    rag_evidence.append({
+                        "query": query,
+                        "status": result.get("status", "ERROR"),
+                        "num_results": result.get("num_results", 0),
+                        "results": [
+                            {
+                                "title": r.get("title", ""),
+                                "doc_type": r.get("doc_type", ""),
+                                "content": r.get("content", "")[:2000],
+                            }
+                            for r in result.get("results", [])
+                        ],
+                    })
+                    return result
+
                 result_text, checks = run_agentic_compliance(
                     requirements=st.session_state.process_requirements,
                     teaser_text=st.session_state.teaser_text,
                     extracted_data=st.session_state.extracted_data,
-                    search_guidelines_fn=tool_search_guidelines,
+                    search_guidelines_fn=_logging_search_guidelines,
                     tracer=get_tracer(),
                     governance_context=st.session_state.get("governance_context"),
                 )
                 st.session_state.compliance_result = result_text
                 st.session_state.compliance_checks = checks
+                st.session_state.guideline_sources = rag_evidence
 
                 insights = run_orchestrator_decision(
                     "COMPLIANCE",
@@ -1541,6 +1562,42 @@ def render_phase_compliance():
 
         with st.expander("📋 Full Compliance Report", expanded=False):
             st.markdown(st.session_state.compliance_result)
+
+        # RAG Evidence Panel — show actual data retrieved from Guidelines
+        rag_evidence = st.session_state.get("guideline_sources", [])
+        if rag_evidence:
+            with st.expander(f"🔍 RAG Evidence — {len(rag_evidence)} searches performed", expanded=False):
+                st.caption(
+                    "This section shows the **actual data retrieved from your Guidelines document** "
+                    "via RAG search. Use it to verify that the compliance checks are grounded in real document content, "
+                    "not hallucinated."
+                )
+                for i, evidence in enumerate(rag_evidence, 1):
+                    query = evidence.get("query", "")
+                    status = evidence.get("status", "ERROR")
+                    results = evidence.get("results", [])
+
+                    status_icon = "✅" if status == "OK" and results else "❌"
+                    st.markdown(f"**Search {i}:** `{query}` {status_icon} ({len(results)} results)")
+
+                    if not results:
+                        st.warning(f"  No results returned for this query")
+                    else:
+                        for j, r in enumerate(results, 1):
+                            title = r.get("title", "Untitled")
+                            doc_type = r.get("doc_type", "Unknown")
+                            content = r.get("content", "")
+                            with st.container():
+                                st.caption(f"  📄 **[{doc_type}]** {title}")
+                                if content:
+                                    # Show first 500 chars of actual RAG content
+                                    preview = content[:500]
+                                    if len(content) > 500:
+                                        preview += "..."
+                                    st.text(preview)
+                    st.divider()
+        elif st.session_state.compliance_result:
+            st.info("ℹ️ RAG evidence not captured for this run. Re-run compliance to see search evidence.")
 
         # Orchestrator routing gate
         routing = st.session_state.get("orchestrator_routing", {})
