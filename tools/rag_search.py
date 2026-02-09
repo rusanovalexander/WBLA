@@ -169,22 +169,27 @@ def search_rag(query: str, num_results: int = 5) -> Dict[str, Any]:
             
             # Get URI
             uri = data.get("link", data.get("uri", ""))
-            
-            # Determine document type
-            doc_type = "Unknown"
-            if uri:
-                uri_lower = uri.lower()
-                if any(w in uri_lower for w in ["procedure", "assessment", "process"]):
-                    doc_type = "Procedure"
-                elif any(w in uri_lower for w in ["guideline", "guidance", "lending", "policy"]):
-                    doc_type = "Guidelines"
-            
-            # Get title
+
+            # Get title early — needed for doc type detection (DD-4)
             title = data.get("title", "")
             if not title and uri:
                 title = Path(uri).stem.replace("-", " ").replace("_", " ")
             if not title:
                 title = doc.id
+
+            # Determine document type — check both URI and title for keywords
+            doc_type = "Unknown"
+            uri_lower = uri.lower() if uri else ""
+            title_lower = title.lower() if title else ""
+            # Check URI first (most reliable), then title as fallback
+            if any(w in uri_lower for w in ["procedure", "assessment", "process"]):
+                doc_type = "Procedure"
+            elif any(w in uri_lower for w in ["guideline", "guidance", "lending", "policy"]):
+                doc_type = "Guidelines"
+            elif any(w in title_lower for w in ["procedure", "assessment", "process"]):
+                doc_type = "Procedure"
+            elif any(w in title_lower for w in ["guideline", "guidance", "lending", "policy"]):
+                doc_type = "Guidelines"
             
             # Collect content
             content_parts = []

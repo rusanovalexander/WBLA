@@ -225,7 +225,7 @@ def run_agentic_analysis(
     # Try native function calling first
     if use_native_tools:
         try:
-            raw = _run_analysis_native(teaser_text, search_procedure_fn, tracer, pa_instruction)
+            raw = _run_analysis_native(teaser_text, search_procedure_fn, tracer, pa_instruction, governance_context)
         except Exception as e:
             logger.warning("Native tool calling failed, falling back to text-based: %s", e)
             tracer.record("ProcessAnalyst", "FALLBACK", f"Native tools failed: {e}")
@@ -266,11 +266,12 @@ def _run_analysis_native(
     search_procedure_fn: Callable,
     tracer: TraceStore,
     instruction: str = "",
+    governance_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Analysis using native Gemini function calling."""
     from tools.function_declarations import get_agent_tools, create_tool_executor
 
-    tools = get_agent_tools("ProcessAnalyst")
+    tools = get_agent_tools("ProcessAnalyst", governance_context=governance_context)
     if not tools:
         raise RuntimeError("No native tool declarations available")
 
@@ -641,7 +642,8 @@ def run_agentic_compliance(
         try:
             result_text = _run_compliance_native(
                 filled_data, teaser_text, extracted_data,
-                search_guidelines_fn, tracer, ca_instruction, compliance_criteria_hint
+                search_guidelines_fn, tracer, ca_instruction, compliance_criteria_hint,
+                governance_context
             )
         except Exception as e:
             logger.warning("Native compliance tools failed: %s", e)
@@ -671,11 +673,12 @@ def _run_compliance_native(
     tracer: TraceStore,
     instruction: str = "",
     compliance_criteria_hint: str = "",
+    governance_context: dict[str, Any] | None = None,
 ) -> str:
     """Compliance using native function calling. Returns raw analysis text."""
     from tools.function_declarations import get_agent_tools, create_tool_executor
 
-    tools = get_agent_tools("ComplianceAdvisor")
+    tools = get_agent_tools("ComplianceAdvisor", governance_context=governance_context)
     if not tools:
         raise RuntimeError("No native tool declarations available")
 
@@ -1069,7 +1072,31 @@ Return ONLY the JSON array.
         tracer.record("StructureGen", "COMPLETE", f"Generated {len(sections)} sections")
         return sections
 
-    tracer.record("StructureGen", "PARSE_FAIL", "Could not generate section structure")
+    # AG-1: Retry with simplified prompt using MODEL_FLASH at temperature 0.0
+    tracer.record("StructureGen", "RETRY", "First attempt failed JSON extraction — retrying with simplified prompt")
+    logger.warning("Section structure first attempt failed, retrying with MODEL_FLASH")
+
+    retry_prompt = f"""Generate a JSON array of credit pack sections for this deal.
+
+Assessment Approach: {assessment_approach}
+Origination Method: {origination_method}
+
+Deal excerpt: {analysis_text[:2000]}
+
+Return ONLY a valid JSON array. Each element must have "name", "description", and "detail_level" fields.
+Example: [{{"name": "Executive Summary", "description": "Overview of the deal", "detail_level": "Standard"}}]
+
+Return ONLY the JSON array, no other text.
+"""
+    retry_result = call_llm(retry_prompt, MODEL_FLASH, 0.0, 3000, "StructureGen", tracer)
+    retry_sections = safe_extract_json(retry_result.text, "array")
+
+    if retry_sections and len(retry_sections) >= 2:
+        tracer.record("StructureGen", "RETRY_SUCCESS", f"Retry generated {len(retry_sections)} sections")
+        return retry_sections
+
+    tracer.record("StructureGen", "PARSE_FAIL", "Could not generate section structure after 2 attempts")
+    logger.error("Section structure generation failed after retry. Last output: %s", retry_result.text[:500])
     return []
 
 
@@ -1181,6 +1208,45 @@ Remember:
             if "### 📋 SECTION METADATA" in section_part:
                 section_part = section_part.split("### 📋 SECTION METADATA")[0]
             draft_content = section_part.strip()
+
+    # AG-3: Validate Writer output — retry if content is too short or missing
+    min_content_length = 100  # Minimum chars for a valid section draft
+    if len(draft_content.strip()) < min_content_length:
+        tracer.record(
+            "Writer", "VALIDATION_FAIL",
+            f"Draft too short ({len(draft_content.strip())} chars < {min_content_length}). Retrying with focused prompt."
+        )
+        logger.warning("Writer output validation failed for '%s' — retrying", section_name)
+
+        retry_prompt = f"""Draft ONLY the section content for "{section_name}".
+
+Description: {section.get('description', '')}
+
+Use ONLY the following data sources:
+
+Teaser: {teaser_text[:4000]}
+
+Extracted Data: {extracted_data[:3000]}
+
+Requirements: {filled_context[:2000]}
+
+INSTRUCTIONS:
+- Write the section content directly — no metadata, no thinking process
+- Use exact figures and names from the data sources
+- Mark missing information as **[INFORMATION REQUIRED: description]**
+- Output ONLY the section text
+"""
+        retry_result = call_llm_streaming(
+            retry_prompt, MODEL_PRO, 0.2, 6000, "Writer", tracer=tracer
+        )
+        retry_content = retry_result.text.strip()
+
+        if len(retry_content) >= min_content_length:
+            tracer.record("Writer", "RETRY_SUCCESS", f"Retry produced {len(retry_content)} chars")
+            draft_content = retry_content
+        else:
+            tracer.record("Writer", "RETRY_FAILED", f"Retry also too short ({len(retry_content)} chars)")
+            logger.error("Writer retry also failed for '%s'", section_name)
 
     tracer.record("Writer", "COMPLETE", f"Drafted: {section_name} ({len(draft_content)} chars)")
 

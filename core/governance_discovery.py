@@ -296,14 +296,16 @@ def get_terminology_synonyms(governance_context: dict | None = None) -> str:
         if lines:
             return "\n".join(lines)
 
-    # Defaults — used when no governance context is available
+    # Generic banking defaults — no domain-specific terms
+    # Governance discovery will inject domain-specific synonyms when available
     return (
-        '   - "Sponsor Experience" = "Track Record" = "Years of Activity" = "Operating History"\n'
-        '   - "Property Address" = "Location" = "Asset Address" = "Site"\n'
-        '   - "Net Operating Income" = "NOI" = "Operating Income" = "Net Income"\n'
+        '   - "Facility Amount" = "Loan Amount" = "Credit Facility" = "Financing Amount"\n'
+        '   - "Borrower" = "Obligor" = "Debtor" = "Client"\n'
+        '   - "Tenor" = "Term" = "Maturity" = "Duration"\n'
+        '   - "Pricing" = "Margin" = "Spread" = "Interest Rate"\n'
+        '   - "Security" = "Collateral" = "Pledge" = "Guarantee"\n'
         '   - "Loan to Value" = "LTV" = "Leverage" = "LTV Ratio"\n'
-        '   - "Debt Service Coverage" = "DSCR" = "Coverage Ratio" = "DSC"\n'
-        '   - "Interest Coverage" = "ICR" = "Interest Coverage Ratio"'
+        '   - "Debt Service Coverage" = "DSCR" = "Coverage Ratio" = "DSC"'
     )
 
 

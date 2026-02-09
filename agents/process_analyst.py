@@ -75,6 +75,59 @@ def _build_asset_class_hints(governance_context: dict[str, Any] | None) -> str:
     )
 
 
+def _build_example_extraction(governance_context: dict[str, Any] | None) -> str:
+    """Build example extraction dynamically from governance context or generic structure.
+
+    When governance_context has requirement_categories, generates a short
+    category-adapted example. Otherwise, returns a domain-neutral structural
+    example that demonstrates the expected format without any CRE-specific content.
+    """
+    if governance_context and governance_context.get("requirement_categories"):
+        cats = governance_context["requirement_categories"]
+        lines = ["**Example Extraction (adapted to governance categories):**\n"]
+        for cat in cats[:5]:
+            cat_upper = cat.upper() if cat == cat.lower() else cat
+            lines.append(f"### {cat_upper}\n")
+            lines.append(
+                f"[Extract all information related to {cat.lower()} from the teaser. "
+                f'Include exact figures with source quotes, e.g.: '
+                f'"The facility amount is EUR 50 million" [HIGH CONFIDENCE] '
+                f'[Source: "senior facility of EUR 50 million"]. '
+                f"Mark missing information as NOT STATED.]\n"
+            )
+        return "\n".join(lines)
+
+    # Domain-neutral structural example — demonstrates format without CRE bias
+    return """**Example Extraction (generic structure):**
+
+### DEAL STRUCTURE
+
+The transaction is a [currency] [amount] [facility type] with a [tenor] [HIGH CONFIDENCE] [Source: "exact quote from teaser"]. The purpose is [purpose description] [HIGH CONFIDENCE] [Source: "exact quote"]. Pricing is [benchmark] plus [margin] basis points [HIGH CONFIDENCE] [Source: "exact quote"].
+
+### BORROWER AND STRUCTURE
+
+The borrower is [entity name], a [entity type] [HIGH CONFIDENCE] [Source: "exact quote"]. The ultimate beneficial owner is [owner details] [HIGH CONFIDENCE] [Source: "exact quote"]. This is a [new/existing] client relationship [MEDIUM CONFIDENCE] [Inferred: reasoning].
+
+### FINANCIAL METRICS
+
+**Key Ratios:**
+- [Metric 1]: [value] [HIGH CONFIDENCE] [Source: "exact quote"]
+- [Metric 2]: [value] [HIGH CONFIDENCE] [Calculated: methodology]
+- [Metric 3]: [value] [MEDIUM CONFIDENCE] [Estimated: reasoning]
+
+### SECURITY PACKAGE
+
+The facility is secured by [collateral description] [HIGH CONFIDENCE] [Source: "exact quote"].
+[Additional security items with source attribution]
+
+### IDENTIFIED GAPS
+
+**Information NOT stated in the teaser:**
+- [Missing item 1] [NOT STATED]
+- [Missing item 2] [NOT STATED]
+"""
+
+
 _PROCESS_ANALYST_TEMPLATE = """
 You are the **Process Analyst Agent** for a credit pack drafting system.
 
@@ -153,109 +206,7 @@ Organize information naturally based on what the teaser actually contains.
    - [MEDIUM CONFIDENCE]: Reasonably inferred from available info
    - [LOW CONFIDENCE]: Uncertain or requires assumptions
 
-**Example Extraction (Office Deal):**
-
-### DEAL STRUCTURE
-
-The transaction is a EUR 50 million senior secured term facility with a 5-year tenor [HIGH CONFIDENCE] [Source: "senior facility of EUR 50 million...5 year term"]. The purpose is acquisition financing for a portfolio of three office buildings in Frankfurt CBD [HIGH CONFIDENCE] [Source: "financing the acquisition of three office properties located in Frankfurt city center"]. Pricing is 3-month EURIBOR plus 275 basis points [HIGH CONFIDENCE] [Source: "margin of 275bp over 3m EURIBOR"].
-
-### BORROWER AND STRUCTURE
-
-The borrower is Frankfurt Office PropCo GmbH, a newly established German SPV created specifically for this transaction [HIGH CONFIDENCE] [Source: "borrower entity Frankfurt Office PropCo GmbH, a German special purpose vehicle"]. The ultimate beneficial owner is Real Estate Fund V, a closed-end fund managed by ABC Capital Partners [HIGH CONFIDENCE] [Source: "Fund V managed by ABC Capital Partners will hold 100% of the shares"]. This is a new client relationship for the bank [MEDIUM CONFIDENCE] [Inferred: no mention of existing relationship].
-
-### SPONSOR INFORMATION
-
-ABC Capital Partners is a private equity real estate manager with EUR 2.5 billion in assets under management [HIGH CONFIDENCE] [Source: "ABC Capital Partners, AUM EUR 2.5bn"]. The firm focuses exclusively on German commercial real estate with particular expertise in office acquisitions [HIGH CONFIDENCE] [Source: "specialized in German commercial real estate, with focus on office sector"]. The firm has a 15-year track record in the market and has completed over 40 office transactions to date [HIGH CONFIDENCE] [Source: "founded in 2010, completed 40+ office deals across Germany"]. The key decision maker is Managing Partner John Schmidt, who has 20 years of real estate investment experience [HIGH CONFIDENCE] [Source: "John Schmidt, Managing Partner, 20 years experience in CRE investing"].
-
-### ASSET CHARACTERISTICS
-
-**Building Portfolio Overview:**
-The security package comprises three office buildings, all located in Frankfurt CBD within a 2km radius [HIGH CONFIDENCE] [Source: "three office buildings in Frankfurt city center, all within walking distance of each other"].
-
-**Building A - Main Asset:**
-- Location: Mainzer Landstraße 50, Frankfurt [HIGH CONFIDENCE]
-- Size: 8,000 square meters net lettable area [HIGH CONFIDENCE]
-- Occupancy: 95% let [HIGH CONFIDENCE] [Source: "currently 95% occupied"]
-- Major Tenant: Tech Corp GmbH occupies 60% of the space (4,800 sqm) with a lease expiring in 2028 [HIGH CONFIDENCE] [Source: "anchor tenant Tech Corp leases 4,800 sqm until December 2028"]
-- Other Tenants: Multiple smaller tenants across remaining space [MEDIUM CONFIDENCE] [Inferred from occupancy rate and anchor tenant size]
-
-**Building B:**
-- Location: Gutleutstraße 85, Frankfurt [HIGH CONFIDENCE]
-- Size: 5,000 square meters NLA [HIGH CONFIDENCE]
-- Occupancy: 100% let to multiple tenants [HIGH CONFIDENCE]
-- Tenant Profile: No single tenant >20% of space, well-diversified [HIGH CONFIDENCE] [Source: "fully let with strong tenant diversification"]
-
-**Building C:**
-- Location: Taunusanlage 12, Frankfurt [HIGH CONFIDENCE]
-- Size: 2,000 square meters NLA [HIGH CONFIDENCE]  
-- Occupancy: 80% let [HIGH CONFIDENCE]
-- Recent Upgrades: Recently refurbished in 2024 [HIGH CONFIDENCE] [Source: "completed refurbishment in Q2 2024"]
-
-**Combined Portfolio Metrics:**
-- Total NLA: 15,000 square meters [HIGH CONFIDENCE] [Calculated: 8,000 + 5,000 + 2,000]
-- Overall Occupancy: ~93% [HIGH CONFIDENCE] [Calculated weighted average]
-- Valuation: EUR 85 million as of December 2025 by Jones Lang LaSalle [HIGH CONFIDENCE] [Source: "independent valuation EUR 85m, JLL, dated December 2025"]
-
-### FINANCIAL METRICS
-
-**Leverage Analysis:**
-- Loan Amount: EUR 50 million [HIGH CONFIDENCE]
-- Valuation: EUR 85 million [HIGH CONFIDENCE]
-- Loan-to-Value: 58.8% [HIGH CONFIDENCE] [Calculated: 50/85]
-
-**Income and Debt Service:**
-- Net Operating Income: EUR 3.6 million annually [HIGH CONFIDENCE] [Source: "NOI EUR 3.6m per annum"]
-- Annual Debt Service: Approximately EUR 3.0 million [MEDIUM CONFIDENCE] [Estimated based on EUR 50M @ ~6% all-in rate]
-- Debt Service Coverage Ratio: 1.35x [HIGH CONFIDENCE] [Source: "DSCR 1.35x" OR Calculated: 4.05M NCF / 3.0M DS]
-- Debt Yield: 7.2% [HIGH CONFIDENCE] [Calculated: 3.6M NOI / 50M Loan]
-
-**Operating Performance:**
-- Interest Coverage Ratio: 2.1x [HIGH CONFIDENCE] [Source: "ICR 2.1x"]
-- This implies EBITDA of approximately EUR 4.2 million with annual interest costs of EUR 2.0 million [MEDIUM CONFIDENCE] [Inferred from ICR]
-
-**Rental Income:**
-- Building A generates approximately EUR 1.8M annually [MEDIUM CONFIDENCE] [Estimated pro rata by size]
-- Building B generates approximately EUR 1.1M annually [MEDIUM CONFIDENCE]
-- Building C generates approximately EUR 0.7M annually [MEDIUM CONFIDENCE]
-- Total passing rent approximately EUR 3.6M [HIGH CONFIDENCE] [Aligned with NOI]
-
-### SECURITY PACKAGE
-
-**Collateral:**
-The facility is secured by first-ranking mortgages over all three properties [HIGH CONFIDENCE] [Source: "first-ranking mortgage over the three buildings"]. 
-
-**Corporate Support:**
-A corporate guarantee will be provided by ABC Capital Partners GP covering the full debt amount [HIGH CONFIDENCE] [Source: "full recourse guarantee from fund manager"].
-
-**Share Pledge:**
-Pledge over 100% of the shares in the SPV borrower [HIGH CONFIDENCE] [Source: "share pledge over PropCo"].
-
-**Assignment of Income:**
-Assignment of all rental income from the three properties to the lender [HIGH CONFIDENCE] [Source: "assignment of tenant rental payments"].
-
-**Covenants:**
-- Minimum DSCR maintenance covenant of 1.20x [HIGH CONFIDENCE] [Source: "maintain DSCR at or above 1.20x"]
-- Maximum LTV maintenance covenant of 65% [HIGH CONFIDENCE] [Source: "LTV not to exceed 65%"]
-- Minimum liquidity requirement of EUR 500,000 [MEDIUM CONFIDENCE] [Source: "maintain EUR 500k in blocked account"]
-
-### TRANSACTION CONTEXT
-
-**Market Positioning:**
-Frankfurt CBD office market is characterized by strong demand and limited supply, with prime rents increasing 8% year-over-year [HIGH CONFIDENCE] [Source: "Frankfurt CBD prime rents up 8% YoY"]. The buildings are in prime locations near major transport hubs [HIGH CONFIDENCE] [Source: "excellent connectivity to Hauptbahnhof and Frankfurt Airport"].
-
-**Deal Rationale:**
-The acquisition provides the sponsor with income-producing assets in a supply-constrained market with strong fundamentals [MEDIUM CONFIDENCE] [Inferred from market commentary and sponsor strategy].
-
-### IDENTIFIED GAPS
-
-**Information NOT stated in the teaser:**
-- Exact completion/construction dates of the buildings [NOT STATED]
-- Energy efficiency ratings / ESG certifications [NOT STATED]
-- Historical vacancy rates over past 3-5 years [NOT STATED]
-- Specific lease expiry schedule beyond Building A's anchor tenant [NOT STATED]
-- Detailed breakdown of operating expenses and capex reserves [NOT STATED]
-- Identity of junior tenants in Buildings B and C [NOT STATED]
-- Details of recent refurbishment costs for Building C [NOT STATED]
+{example_extraction}
 
 ---
 
@@ -441,6 +392,7 @@ def get_process_analyst_instruction(governance_context: dict[str, Any] | None = 
         asset_class_hints=_build_asset_class_hints(governance_context),
         extraction_sections=_build_extraction_sections(governance_context),
         risk_taxonomy=_build_risk_taxonomy(governance_context),
+        example_extraction=_build_example_extraction(governance_context),
         verbose_block=get_verbose_block(),
     )
 

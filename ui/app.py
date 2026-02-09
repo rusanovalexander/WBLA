@@ -158,8 +158,16 @@ def _advance_phase(next_phase: str):
     }
     try:
         pm.advance_to(next_phase, snapshot)
-    except ValueError:
-        pass  # Phase validation failed — just set directly
+    except ValueError as e:
+        # AG-5: Log validation failures instead of silently suppressing
+        change_log = st.session_state.get("change_log")
+        if change_log:
+            change_log.record_change(
+                "system", "Phase Transition Blocked",
+                st.session_state.get("workflow_phase", "?"),
+                next_phase,
+                f"PhaseManager validation failed: {e}",
+            )
     st.session_state.workflow_phase = next_phase
 
 
@@ -219,6 +227,17 @@ def render_phase_setup():
                 )
                 st.session_state.governance_context = gov_ctx
                 st.session_state.governance_discovery_done = True
+                # AG-4: Re-register agent responders with governance context
+                bus = st.session_state.get("agent_bus")
+                if bus and gov_ctx and gov_ctx.get("discovery_status") in ("complete", "partial"):
+                    bus.register_responder(
+                        "ProcessAnalyst",
+                        create_process_analyst_responder(call_llm, MODEL_PRO, gov_ctx)
+                    )
+                    bus.register_responder(
+                        "ComplianceAdvisor",
+                        create_compliance_advisor_responder(call_llm, MODEL_PRO, tool_search_guidelines, gov_ctx)
+                    )
         # Show discovery results
         gov_ctx = st.session_state.governance_context
         if gov_ctx and gov_ctx.get("discovery_status") == "complete":
@@ -1145,36 +1164,14 @@ def _generate_alternative_terms(requirement_name: str) -> list[str]:
             if isinstance(synonyms, list):
                 gov_terms[term.lower()] = synonyms
 
-    # Common synonyms for banking/lending terms (defaults)
+    # Generic banking/lending synonyms (no domain-specific terms)
+    # Domain-specific terms are injected via governance discovery
     term_map = {
-        # Sponsor-related
-        "experience": ["track record", "history", "years of activity", "background", "years active"],
-        "sponsor": ["backer", "equity provider", "promoter", "investor", "fund manager"],
-
-        # Location-related
-        "address": ["location", "site", "property address", "asset location", "situated at"],
-        "location": ["address", "site", "situated", "geography", "where"],
-
         # Financial metrics
-        "noi": ["net operating income", "operating income", "net income from operations"],
         "ltv": ["loan to value", "leverage", "ltv ratio", "loan-to-value"],
         "dscr": ["debt service coverage", "debt service coverage ratio", "coverage ratio", "dsc"],
         "icr": ["interest coverage", "interest coverage ratio", "ebitda to interest"],
         "debt service": ["principal and interest", "p&i", "loan payments", "debt payments"],
-        "yield": ["return", "debt yield", "yield on cost", "income yield"],
-
-        # Property-related
-        "occupancy": ["occupancy rate", "let", "leased", "tenancy", "vacancy", "let rate"],
-        "vacancy": ["void", "unlet", "vacant space", "empty units"],
-        "valuation": ["value", "appraisal", "market value", "property value", "asset value"],
-        "nla": ["net lettable area", "net leasable area", "rentable area", "usable area"],
-        "sqm": ["square meters", "square metres", "m2", "area"],
-        "rent": ["rental income", "passing rent", "rent roll", "rental", "lease rate"],
-
-        # Tenant-related
-        "tenant": ["occupier", "lessee", "renter", "occupant"],
-        "lease": ["tenancy agreement", "lease agreement", "rental contract", "tenancy"],
-        "wault": ["weighted average unexpired lease term", "average lease term", "lease expiry"],
 
         # Transaction-related
         "covenant": ["financial covenant", "undertaking", "agreement", "maintenance covenant"],
@@ -1183,10 +1180,12 @@ def _generate_alternative_terms(requirement_name: str) -> list[str]:
         "purpose": ["use of proceeds", "rationale", "reason", "objective"],
         "tenor": ["term", "maturity", "duration", "loan term"],
         "pricing": ["margin", "spread", "interest rate", "rate", "cost"],
+        "valuation": ["value", "appraisal", "market value", "asset value"],
 
         # Party-related
         "borrower": ["obligor", "debtor", "company", "entity", "spv"],
         "guarantor": ["sponsor", "parent company", "guarantee provider"],
+        "sponsor": ["backer", "equity provider", "investor", "fund manager"],
     }
 
     # Merge governance terms into term_map (governance takes priority)
@@ -1503,7 +1502,13 @@ def render_phase_compliance():
                         f"{issue.get('evidence', '')}"
                     )
         elif not checks:
+            # AG-2: Detect when compliance text exists but structured extraction failed
             st.warning("⚠️ No structured compliance checks could be extracted from the agent's analysis.")
+            if st.session_state.compliance_result and len(st.session_state.compliance_result.strip()) > 100:
+                st.error(
+                    "🚫 **Compliance analysis was received but structured data couldn't be extracted.** "
+                    "Please review the raw compliance report below before proceeding."
+                )
 
         with st.expander("📋 Full Compliance Report", expanded=False):
             st.markdown(st.session_state.compliance_result)
@@ -1513,10 +1518,25 @@ def render_phase_compliance():
         can_proceed = routing.get("can_proceed", True)
         has_failures = any(c.get("status") == "FAIL" for c in checks)
 
-        if has_failures or not can_proceed:
-            block_reason = routing.get("block_reason", "Compliance failures detected")
+        # AG-2: Also block when compliance text exists but extraction failed
+        extraction_failed = (
+            st.session_state.compliance_result
+            and len(st.session_state.compliance_result.strip()) > 100
+            and not checks
+        )
+
+        if has_failures or not can_proceed or extraction_failed:
+            if extraction_failed:
+                block_reason = "Compliance data received but could not be structured — review raw report"
+            else:
+                block_reason = routing.get("block_reason", "Compliance failures detected")
             st.error(f"🚫 **Cannot auto-proceed:** {block_reason}")
-            if st.checkbox("I acknowledge the compliance issues and wish to proceed to drafting"):
+            ack_label = (
+                "I have reviewed the raw compliance report and wish to proceed"
+                if extraction_failed
+                else "I acknowledge the compliance issues and wish to proceed to drafting"
+            )
+            if st.checkbox(ack_label):
                 st.session_state.change_log.record_change(
                     "manual_input", "Compliance Override", "blocked", "overridden", "COMPLIANCE"
                 )
@@ -1769,7 +1789,28 @@ def render_phase_complete():
 def main():
     render_sidebar(get_tracer(), handle_orchestrator_chat)
 
+    # AG-6: Persistent governance warning banner on every phase except SETUP
     phase = st.session_state.workflow_phase
+    if phase != "SETUP":
+        gov_ctx = st.session_state.get("governance_context")
+        if gov_ctx:
+            status = gov_ctx.get("discovery_status", "")
+            if status == "partial":
+                st.warning(
+                    "⚠️ Governance discovery partially completed. "
+                    "Some features are using default settings instead of document-derived parameters."
+                )
+            elif status == "failed":
+                st.error(
+                    "🚫 Governance documents not analyzed. "
+                    "System using default settings. Consider re-running setup to analyze Procedure & Guidelines."
+                )
+        elif st.session_state.get("governance_discovery_done"):
+            # Discovery ran but returned None
+            st.error(
+                "🚫 Governance discovery failed. "
+                "System using default settings. Consider re-running setup."
+            )
 
     if phase == "SETUP":
         render_phase_setup()

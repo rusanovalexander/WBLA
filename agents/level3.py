@@ -11,6 +11,8 @@ from typing import Any, Callable
 
 from models.schemas import AgentMessage
 from core.parsers import format_requirements_for_context
+from agents.process_analyst import get_process_analyst_instruction
+from agents.compliance_advisor import get_compliance_advisor_instruction
 
 
 # =============================================================================
@@ -86,8 +88,20 @@ class AgentCommunicationBus:
 def create_process_analyst_responder(
     llm_caller: Callable,
     model: str,
+    governance_context: dict[str, Any] | None = None,
 ) -> Callable:
-    """Create a responder function for Process Analyst inter-agent queries."""
+    """Create a responder function for Process Analyst inter-agent queries.
+
+    When governance_context is provided, the responder uses governance-aware
+    instructions for more accurate, domain-adapted responses.
+    """
+
+    # Build governance-aware role context if available
+    if governance_context:
+        pa_instr = get_process_analyst_instruction(governance_context)
+        role_context = f"\n## YOUR ROLE (from governance context)\n{pa_instr[:1500]}\n"
+    else:
+        role_context = ""
 
     def responder(query: str, context: dict) -> str:
         teaser_text = context.get("teaser_text", "")
@@ -96,7 +110,7 @@ def create_process_analyst_responder(
         filled_reqs = format_requirements_for_context(requirements)
 
         prompt = f"""You are the Process Analyst. Another agent needs information from your analysis.
-
+{role_context}
 ## THEIR QUESTION
 {query}
 
@@ -128,8 +142,20 @@ def create_compliance_advisor_responder(
     llm_caller: Callable,
     model: str,
     rag_tool: Callable,
+    governance_context: dict[str, Any] | None = None,
 ) -> Callable:
-    """Create a responder function for Compliance Advisor inter-agent queries."""
+    """Create a responder function for Compliance Advisor inter-agent queries.
+
+    When governance_context is provided, the responder uses governance-aware
+    instructions for more accurate, domain-adapted responses.
+    """
+
+    # Build governance-aware role context if available
+    if governance_context:
+        ca_instr = get_compliance_advisor_instruction(governance_context)
+        role_context = f"\n## YOUR ROLE (from governance context)\n{ca_instr[:1500]}\n"
+    else:
+        role_context = ""
 
     def responder(query: str, context: dict) -> str:
         rag_result = rag_tool(query, num_results=3)
@@ -143,7 +169,7 @@ def create_compliance_advisor_responder(
         compliance_result = context.get("compliance_result", "")
 
         prompt = f"""You are the Compliance Advisor. Another agent needs compliance information.
-
+{role_context}
 ## THEIR QUESTION
 {query}
 
