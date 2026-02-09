@@ -18,7 +18,7 @@ from ui.components.agent_dashboard import render_agent_dashboard_compact
 def render_sidebar(tracer: TraceStore, handle_chat_fn):
     """Render the complete sidebar."""
     with st.sidebar:
-        st.title("🏦 Credit Pack v3.2")
+        st.title("🏦 CPS")
         st.caption("Multi-Agent System with Native Tool Use")
 
         st.divider()
