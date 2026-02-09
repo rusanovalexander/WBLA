@@ -111,9 +111,14 @@ def _call_gemini(
     max_tokens: int,
     tools: list[Any] | None = None,
     tool_config: Any | None = None,
+    thinking_budget: int | None = None,
 ) -> Any:
     """
     Raw Gemini API call with retry.
+
+    Args:
+        thinking_budget: Thinking token budget for gemini-2.5 models.
+            0 = disable thinking, >0 = limit thinking tokens, None = no config (model default).
 
     Returns the raw response object for the caller to process.
     """
@@ -121,10 +126,18 @@ def _call_gemini(
 
     client = _get_client()
 
-    config = types.GenerateContentConfig(
-        temperature=temperature,
-        max_output_tokens=max_tokens,
-    )
+    config_kwargs: dict[str, Any] = {
+        "temperature": temperature,
+        "max_output_tokens": max_tokens,
+    }
+
+    # Add thinking config for gemini-2.5 models
+    if thinking_budget is not None:
+        config_kwargs["thinking_config"] = types.ThinkingConfig(
+            thinking_budget=thinking_budget
+        )
+
+    config = types.GenerateContentConfig(**config_kwargs)
 
     # Add tools if provided (native function calling)
     if tools:
@@ -147,6 +160,7 @@ def call_llm(
     max_tokens: int = 16384,
     agent_name: str = "LLM",
     tracer: TraceStore | None = None,
+    thinking_budget: int | None = None,
 ) -> LLMCallResult:
     """
     Call Vertex AI Gemini with full tracing and retry.
@@ -158,6 +172,7 @@ def call_llm(
         max_tokens: Maximum output tokens
         agent_name: Agent making the call (for tracing)
         tracer: TraceStore instance (uses global if not provided)
+        thinking_budget: Thinking token budget (0=off, >0=limit, None=model default)
 
     Returns:
         LLMCallResult with text, metadata, and cost info
@@ -172,6 +187,7 @@ def call_llm(
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                thinking_budget=thinking_budget,
             )
 
             # Guard: response.text can fail if no candidates (e.g., safety block, cancelled)
@@ -229,6 +245,7 @@ def call_llm_with_backoff(
     agent_name: str = "Agent",
     tracer: TraceStore | None = None,
     max_retries: int = 5,
+    thinking_budget: int | None = None,
 ) -> LLMCallResult:
     """
     Call LLM with exponential backoff for rate limit errors (429).
@@ -246,6 +263,7 @@ def call_llm_with_backoff(
     Args:
         Same as call_llm, plus:
         max_retries: Maximum retry attempts for 429 errors (default: 5)
+        thinking_budget: Thinking token budget (0=off, >0=limit, None=model default)
 
     Returns:
         LLMCallResult
@@ -257,7 +275,7 @@ def call_llm_with_backoff(
 
     result = None
     for attempt in range(max_retries):
-        result = call_llm(prompt, model, temperature, max_tokens, agent_name, tracer)
+        result = call_llm(prompt, model, temperature, max_tokens, agent_name, tracer, thinking_budget=thinking_budget)
 
         # If call succeeded, return immediately
         if result.success:
@@ -320,6 +338,7 @@ def _call_gemini_streaming(
     temperature: float,
     max_tokens: int,
     on_chunk: Callable[[str], None] | None = None,
+    thinking_budget: int | None = None,
 ) -> str:
     """
     Raw Gemini streaming API call with retry.
@@ -331,10 +350,17 @@ def _call_gemini_streaming(
 
     client = _get_client()
 
-    config = types.GenerateContentConfig(
-        temperature=temperature,
-        max_output_tokens=max_tokens,
-    )
+    config_kwargs: dict[str, Any] = {
+        "temperature": temperature,
+        "max_output_tokens": max_tokens,
+    }
+
+    if thinking_budget is not None:
+        config_kwargs["thinking_config"] = types.ThinkingConfig(
+            thinking_budget=thinking_budget
+        )
+
+    config = types.GenerateContentConfig(**config_kwargs)
 
     chunks: list[str] = []
     for chunk in client.models.generate_content_stream(
@@ -358,6 +384,7 @@ def call_llm_streaming(
     agent_name: str = "LLM",
     on_chunk: Callable[[str], None] | None = None,
     tracer: TraceStore | None = None,
+    thinking_budget: int | None = None,
 ) -> LLMCallResult:
     """
     Call Vertex AI Gemini with streaming output.
@@ -370,12 +397,13 @@ def call_llm_streaming(
         agent_name: Agent making the call (for tracing)
         on_chunk: Callback for each text chunk (for Streamlit streaming)
         tracer: TraceStore instance
+        thinking_budget: Thinking token budget (0=off, >0=limit, None=model default)
 
     Returns:
         LLMCallResult with complete text and metadata
     """
     if not ENABLE_STREAMING:
-        return call_llm(prompt, model, temperature, max_tokens, agent_name, tracer)
+        return call_llm(prompt, model, temperature, max_tokens, agent_name, tracer, thinking_budget=thinking_budget)
 
     if tracer is None:
         tracer = get_tracer()
@@ -388,6 +416,7 @@ def call_llm_streaming(
                 temperature=temperature,
                 max_tokens=max_tokens,
                 on_chunk=on_chunk,
+                thinking_budget=thinking_budget,
             )
 
             ctx["response_text"] = result_text
@@ -451,6 +480,7 @@ def call_llm_with_tools(
     agent_name: str = "LLM",
     max_tool_rounds: int = 5,
     tracer: TraceStore | None = None,
+    thinking_budget: int | None = None,
 ) -> LLMCallResult:
     """
     Call Gemini with native function calling in a ReAct-style loop.
@@ -468,6 +498,7 @@ def call_llm_with_tools(
         agent_name: Agent making the call
         max_tool_rounds: Max tool-use iterations before forcing text response
         tracer: TraceStore instance
+        thinking_budget: Thinking token budget (0=off, >0=limit, None=model default)
 
     Returns:
         LLMCallResult with final text response
@@ -481,11 +512,16 @@ def call_llm_with_tools(
 
     client = _get_client()
 
-    config = types.GenerateContentConfig(
-        temperature=temperature,
-        max_output_tokens=max_tokens,
-        tools=tools,
-    )
+    config_kwargs: dict[str, Any] = {
+        "temperature": temperature,
+        "max_output_tokens": max_tokens,
+        "tools": tools,
+    }
+    if thinking_budget is not None:
+        config_kwargs["thinking_config"] = types.ThinkingConfig(
+            thinking_budget=thinking_budget
+        )
+    config = types.GenerateContentConfig(**config_kwargs)
 
     # Build conversation history for multi-turn tool use
     contents = [types.Content(role="user", parts=[types.Part(text=prompt)])]
@@ -518,6 +554,7 @@ def call_llm_with_tools(
                 temperature=temperature,
                 max_tokens=max_tokens,
                 tools=tools,
+                thinking_budget=thinking_budget,
             )
         except Exception as e:
             logger.error("Tool call round %d failed: %s", round_num + 1, e, exc_info=True)

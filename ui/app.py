@@ -27,7 +27,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from config.settings import (
     PROJECT_ID, MODEL_PRO, MODEL_FLASH, VERSION,
     DATA_STORE_ID, TEASERS_FOLDER, EXAMPLES_FOLDER,
-    PRODUCT_NAME,
+    PRODUCT_NAME, THINKING_BUDGET_NONE, THINKING_BUDGET_LIGHT,
     setup_environment, validate_config,
 )
 setup_environment()
@@ -210,7 +210,7 @@ Origination Method: {st.session_state.origination_method}
 
 Answer concisely and helpfully.
 """
-    result = call_llm(prompt, MODEL_PRO, 0.1, 2000, "OrchestratorChat", tracer)
+    result = call_llm(prompt, MODEL_PRO, 0.1, 2000, "OrchestratorChat", tracer, thinking_budget=THINKING_BUDGET_LIGHT)
     return result.text
 
 
@@ -887,7 +887,7 @@ Use semantic matching to find values even if terminology differs.
 Output ONLY <json_output> tags with JSON array inside, NO other text.
 """
 
-    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.0, 8000, "AutoFill", tracer, max_retries=5)
+    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.0, 8000, "AutoFill", tracer, max_retries=5, thinking_budget=THINKING_BUDGET_NONE)
 
     tracer.record("AutoFill", "RAW_RESPONSE", f"LLM returned {len(result.text)} chars")
 
@@ -1095,7 +1095,7 @@ Output ONLY the JSON between <json_output></json_output> tags with NO other text
 
     # Increased token budget to handle complex multi-line values (sponsor profiles, rent rolls, etc.)
     # Use backoff retry to handle rate limits gracefully
-    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.0, 6000, "AISuggest", tracer)
+    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.0, 6000, "AISuggest", tracer, thinking_budget=THINKING_BUDGET_NONE)
     
     # Use improved parser with XML tag support
     parsed = safe_extract_json(result.text, "object")
@@ -1167,7 +1167,7 @@ Be flexible and generous in matching. If you find something that seems related t
 include it even if the wording is different.
 """
     
-    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.1, 4000, "AISuggestRetry", tracer)
+    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.1, 4000, "AISuggestRetry", tracer, thinking_budget=THINKING_BUDGET_NONE)
     parsed = safe_extract_json(result.text, "object")
     
     if parsed and parsed.get("value"):
@@ -1291,7 +1291,7 @@ Respond with ONLY a JSON object:
 
 Return ONLY the JSON object.
 """
-        result = call_llm(prompt, MODEL_PRO, 0.0, 1500, "FileAnalysis", tracer)
+        result = call_llm(prompt, MODEL_PRO, 0.0, 1500, "FileAnalysis", tracer, thinking_budget=THINKING_BUDGET_NONE)
         parsed = safe_extract_json(result.text, "object")
 
         if parsed and parsed.get("value"):
@@ -1385,7 +1385,7 @@ Respond with ONLY a JSON array:
 
 Return ONLY the JSON array. If nothing matches, return an empty array [].
 """
-            result = call_llm(prompt, MODEL_PRO, 0.0, 3000, "BulkAnalysis", tracer)
+            result = call_llm(prompt, MODEL_PRO, 0.0, 3000, "BulkAnalysis", tracer, thinking_budget=THINKING_BUDGET_NONE)
             fills = safe_extract_json(result.text, "array")
 
             fill_count = 0

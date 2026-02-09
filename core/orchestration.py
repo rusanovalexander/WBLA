@@ -22,7 +22,7 @@ import logging
 import re
 from typing import Any, Callable
 
-from config.settings import MODEL_PRO, MODEL_FLASH, AGENT_MODELS, PRODUCT_NAME
+from config.settings import MODEL_PRO, MODEL_FLASH, AGENT_MODELS, PRODUCT_NAME, THINKING_BUDGET_NONE, THINKING_BUDGET_LIGHT, THINKING_BUDGET_STANDARD
 from core.llm_client import call_llm, call_llm_with_tools, call_llm_streaming, require_success
 from core.tracing import TraceStore, get_tracer
 from core.parsers import (
@@ -150,7 +150,7 @@ def _extract_structured_decision(
 
         tracer.record("Extraction", "ATTEMPT", f"Attempt {attempt + 1}/2 (temp={temperature})")
 
-        result = call_llm(prompt, MODEL_FLASH, temperature, 4000, "Extraction", tracer)
+        result = call_llm(prompt, MODEL_FLASH, temperature, 4000, "Extraction", tracer, thinking_budget=THINKING_BUDGET_NONE)
         # AG-H3: Check LLM success before using output
         if not result.success:
             tracer.record("Extraction", "LLM_FAIL", result.error or "Unknown")
@@ -214,7 +214,7 @@ def _extract_compliance_checks(
 
         tracer.record("Extraction", "ATTEMPT", f"Attempt {attempt + 1}/3 (temp={temperature}, max_tokens={max_tok})")
 
-        result = call_llm(prompt, MODEL_FLASH, temperature, max_tok, "Extraction", tracer)
+        result = call_llm(prompt, MODEL_FLASH, temperature, max_tok, "Extraction", tracer, thinking_budget=THINKING_BUDGET_NONE)
         # AG-H3: Check LLM success before using output
         if not result.success:
             tracer.record("Extraction", "LLM_FAIL", result.error or "Unknown")
@@ -247,7 +247,7 @@ def _extract_compliance_checks(
         tracer.record("Extraction", "CHUNK_FALLBACK", "Trying extraction from last 15k chars only")
         tail_text = compliance_text[-15000:]
         tail_prompt = COMPLIANCE_EXTRACTION_PROMPT.format(compliance_text=tail_text)
-        tail_result = call_llm(tail_prompt, MODEL_FLASH, 0.0, 24000, "Extraction", tracer)
+        tail_result = call_llm(tail_prompt, MODEL_FLASH, 0.0, 24000, "Extraction", tracer, thinking_budget=THINKING_BUDGET_NONE)
         if tail_result.success:
             last_output = tail_result.text
             tail_parsed = safe_extract_json(tail_result.text, "array")
@@ -501,6 +501,7 @@ After searching, produce your FULL analysis following the OUTPUT_STRUCTURE.
         agent_name="ProcessAnalyst",
         max_tool_rounds=8,
         tracer=tracer,
+        thinking_budget=THINKING_BUDGET_LIGHT,
     )
 
     tracer.record("ProcessAnalyst", "ANALYSIS_DONE", f"Generated {len(result.text)} chars")
@@ -549,7 +550,7 @@ Output your analysis and list your RAG queries using:
 <TOOL>search_procedure: "your query"</TOOL>
 """
 
-    planning = call_llm(planning_prompt, MODEL_PRO, 0.0, 3000, "ProcessAnalyst", tracer)
+    planning = call_llm(planning_prompt, MODEL_PRO, 0.0, 3000, "ProcessAnalyst", tracer, thinking_budget=THINKING_BUDGET_LIGHT)
     if not planning.success:
         tracer.record("ProcessAnalyst", "LLM_FAIL", f"Planning call failed: {planning.error or 'Unknown'}")
         return {"full_analysis": f"[Analysis failed: {planning.error}]", "process_path": "", "origination_method": "",
@@ -576,7 +577,7 @@ Each query should target a specific rule, threshold, or requirement.
 Output ONLY your queries, one per line, using this format:
 <TOOL>search_procedure: "your specific query"</TOOL>
 """
-        retry = call_llm(retry_prompt, MODEL_FLASH, 0.0, 1000, "ProcessAnalyst", tracer)
+        retry = call_llm(retry_prompt, MODEL_FLASH, 0.0, 1000, "ProcessAnalyst", tracer, thinking_budget=THINKING_BUDGET_NONE)
         tool_calls = parse_tool_calls(retry.text, "search_procedure")
         tracer.record(
             "ProcessAnalyst", "RETRY_RESULT",
@@ -616,7 +617,7 @@ Using the teaser AND the Procedure search results:
 You MUST cite specific Procedure sections. Do NOT guess limits — only use values from the search results above.
 """
 
-    final = call_llm(analysis_prompt, MODEL_PRO, 0.0, 16384, "ProcessAnalyst", tracer)
+    final = call_llm(analysis_prompt, MODEL_PRO, 0.0, 16384, "ProcessAnalyst", tracer, thinking_budget=THINKING_BUDGET_STANDARD)
     if not final.success:
         tracer.record("ProcessAnalyst", "LLM_FAIL", f"Analysis call failed: {final.error or 'Unknown'}")
         return {"full_analysis": f"[Analysis failed: {final.error}]", "process_path": "", "origination_method": "",
@@ -766,7 +767,7 @@ def discover_requirements(
         governance_categories=governance_categories,
     )
 
-    result = call_llm(prompt, MODEL_PRO, 0.0, 5000, "RequirementsDiscovery", tracer)
+    result = call_llm(prompt, MODEL_PRO, 0.0, 5000, "RequirementsDiscovery", tracer, thinking_budget=THINKING_BUDGET_LIGHT)
     if not result.success:
         tracer.record("RequirementsDiscovery", "LLM_FAIL", f"LLM call failed: {result.error or 'Unknown'}")
         return []
@@ -937,6 +938,7 @@ Follow the OUTPUT_STRUCTURE from your instructions.
         agent_name="ComplianceAdvisor",
         max_tool_rounds=8,
         tracer=tracer,
+        thinking_budget=THINKING_BUDGET_LIGHT,
     )
 
     return result.text
@@ -978,7 +980,7 @@ You MUST plan your searches. List each search query:
 <TOOL>search_guidelines: "your specific query"</TOOL>
 """
 
-    planning = call_llm(planning_prompt, MODEL_PRO, 0.0, 2500, "ComplianceAdvisor", tracer)
+    planning = call_llm(planning_prompt, MODEL_PRO, 0.0, 2500, "ComplianceAdvisor", tracer, thinking_budget=THINKING_BUDGET_LIGHT)
     if not planning.success:
         tracer.record("ComplianceAdvisor", "LLM_FAIL", f"Planning call failed: {planning.error or 'Unknown'}")
         return f"[Compliance analysis failed: {planning.error}]"
@@ -1000,7 +1002,7 @@ Each query should target a specific section, limit, or requirement.
 
 <TOOL>search_guidelines: "your specific query"</TOOL>
 """
-        retry = call_llm(retry_prompt, MODEL_FLASH, 0.0, 1000, "ComplianceAdvisor", tracer)
+        retry = call_llm(retry_prompt, MODEL_FLASH, 0.0, 1000, "ComplianceAdvisor", tracer, thinking_budget=THINKING_BUDGET_NONE)
         tool_calls = parse_tool_calls(retry.text, "search_guidelines")
         tracer.record(
             "ComplianceAdvisor", "RETRY_RESULT",
@@ -1042,7 +1044,7 @@ Using the Guidelines search results above:
 Include ALL applicable criteria found in the Guidelines.
 """
 
-    result = call_llm(assessment_prompt, MODEL_PRO, 0.0, 32000, "ComplianceAdvisor", tracer)
+    result = call_llm(assessment_prompt, MODEL_PRO, 0.0, 32000, "ComplianceAdvisor", tracer, thinking_budget=THINKING_BUDGET_STANDARD)
     if not result.success:
         tracer.record("ComplianceAdvisor", "LLM_FAIL", f"Assessment call failed: {result.error or 'Unknown'}")
         return f"[Compliance assessment failed: {result.error}]"
@@ -1135,7 +1137,7 @@ def run_orchestrator_decision(
 
     analysis_prompt += "\nProvide your complete analysis: observations, risk flags, plan adjustments, and recommendations.\n"
 
-    analysis_result = call_llm(analysis_prompt, MODEL_PRO, 0.1, 3000, "Orchestrator", tracer)
+    analysis_result = call_llm(analysis_prompt, MODEL_PRO, 0.1, 3000, "Orchestrator", tracer, thinking_budget=THINKING_BUDGET_LIGHT)
     if not analysis_result.success:
         tracer.record("Orchestrator", "LLM_FAIL", f"Analysis call failed: {analysis_result.error or 'Unknown'}")
         return OrchestratorInsights(
@@ -1148,7 +1150,7 @@ def run_orchestrator_decision(
         analysis_text=analysis_result.text,
         phase=phase,
     )
-    routing_result = call_llm(routing_prompt, MODEL_FLASH, 0.0, 3000, "Orchestrator", tracer)
+    routing_result = call_llm(routing_prompt, MODEL_FLASH, 0.0, 3000, "Orchestrator", tracer, thinking_budget=THINKING_BUDGET_NONE)
     if not routing_result.success:
         tracer.record("Orchestrator", "LLM_FAIL", f"Routing call failed: {routing_result.error or 'Unknown'}")
         return OrchestratorInsights(
@@ -1305,7 +1307,7 @@ Return a JSON array:
 Return ONLY the JSON array.
 """
 
-    result = call_llm(prompt, MODEL_PRO, 0.0, 4000, "StructureGen", tracer)
+    result = call_llm(prompt, MODEL_PRO, 0.0, 4000, "StructureGen", tracer, thinking_budget=THINKING_BUDGET_LIGHT)
     if not result.success:
         tracer.record("StructureGen", "LLM_FAIL", f"Structure generation failed: {result.error or 'Unknown'}")
         return []
@@ -1332,7 +1334,7 @@ Example: [{{"name": "Executive Summary", "description": "Overview of the deal", 
 
 Return ONLY the JSON array, no other text.
 """
-    retry_result = call_llm(retry_prompt, MODEL_FLASH, 0.0, 3000, "StructureGen", tracer)
+    retry_result = call_llm(retry_prompt, MODEL_FLASH, 0.0, 3000, "StructureGen", tracer, thinking_budget=THINKING_BUDGET_NONE)
     retry_sections = safe_extract_json(retry_result.text, "array")
 
     if retry_sections and len(retry_sections) >= 2:
@@ -1428,7 +1430,7 @@ Remember:
 """
 
     result = call_llm_streaming(
-        prompt, MODEL_PRO, 0.3, 8000, "Writer", tracer=tracer
+        prompt, MODEL_PRO, 0.3, 8000, "Writer", tracer=tracer, thinking_budget=THINKING_BUDGET_STANDARD
     )
     if not result.success:
         tracer.record("Writer", "LLM_FAIL", f"Drafting call failed: {result.error or 'Unknown'}")
@@ -1470,7 +1472,7 @@ Refine your draft by incorporating the information from the agent responses abov
 - Output ONLY the refined section text — no metadata or thinking
 """
             refined = call_llm_streaming(
-                refinement_prompt, MODEL_PRO, 0.2, 8000, "Writer", tracer=tracer
+                refinement_prompt, MODEL_PRO, 0.2, 8000, "Writer", tracer=tracer, thinking_budget=THINKING_BUDGET_STANDARD
             )
             if refined.success and len(refined.text.strip()) > 100:
                 tracer.record("Writer", "REFINEMENT_OK", f"Refined draft: {len(refined.text)} chars")
@@ -1515,7 +1517,7 @@ INSTRUCTIONS:
 - Output ONLY the section text
 """
         retry_result = call_llm_streaming(
-            retry_prompt, MODEL_PRO, 0.2, 6000, "Writer", tracer=tracer
+            retry_prompt, MODEL_PRO, 0.2, 6000, "Writer", tracer=tracer, thinking_budget=THINKING_BUDGET_STANDARD
         )
         retry_content = retry_result.text.strip()
 

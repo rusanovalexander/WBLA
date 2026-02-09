@@ -148,6 +148,18 @@ REQUIRE_APPROVAL = os.getenv("REQUIRE_APPROVAL", "true").lower() == "true"
 # Max tokens for context
 MAX_CONTEXT_TOKENS = 100_000
 
+# =============================================================================
+# Thinking Budget Configuration (gemini-2.5-pro/flash thinking control)
+# =============================================================================
+# 0 = disabled (extraction tasks — pure JSON output)
+# 2048 = light thinking (tool-calling loops, routing decisions)
+# 4096 = standard thinking (agent analysis, drafting)
+# None = model default (no ThinkingConfig set)
+
+THINKING_BUDGET_NONE = 0       # Extraction, JSON parsing, auto-fill
+THINKING_BUDGET_LIGHT = 2048   # Tool loops, routing, planning
+THINKING_BUDGET_STANDARD = 4096  # Agent analysis, compliance, drafting
+
 
 # =============================================================================
 # Helper Functions
