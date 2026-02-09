@@ -285,11 +285,16 @@ def safe_extract_json(text: str, expect_type: str = "object") -> Any:
     brace_depth = 0  # {}
     bracket_depth = 0  # []
     in_str = False
+    escape_next = False
     for i in range(start, len(cleaned)):
+        if escape_next:
+            escape_next = False
+            continue
         ch = cleaned[i]
         if ch == '\\' and in_str:
-            continue  # skip escaped chars
-        if ch == '"' and (i == 0 or cleaned[i - 1] != '\\'):
+            escape_next = True  # skip next char (the escaped character)
+            continue
+        if ch == '"':
             in_str = not in_str
         if in_str:
             continue

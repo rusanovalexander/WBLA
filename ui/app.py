@@ -9,12 +9,15 @@ Key changes from previous version:
 - Process path defaults removed — agent must decide or human must choose
 """
 
+import logging
 import streamlit as st
 import json
 import os
 from pathlib import Path
 from datetime import datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Setup
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -1646,6 +1649,15 @@ def render_phase_drafting():
     structure = st.session_state.proposed_structure
     drafts = st.session_state.section_drafts
 
+    # Deduplicate section names (LLM may generate duplicates, which breaks dict-keyed drafts)
+    if structure:
+        seen_names: set[str] = set()
+        for sec in structure:
+            name = sec.get("name", "")
+            if name in seen_names:
+                sec["name"] = f"{name} ({structure.index(sec) + 1})"
+            seen_names.add(sec.get("name", ""))
+
     if not structure:
         # Show error from previous failed attempt
         if st.session_state.get("_structure_gen_failed"):
@@ -1697,31 +1709,35 @@ def render_phase_drafting():
         st.progress(len(drafts) / max(len(structure), 1))
 
         # Draft All button
-        undrafted = [s for s in structure if s["name"] not in drafts]
+        undrafted = [s for s in structure if s.get("name", f"Section_{i}") not in drafts]
         if undrafted:
             if st.button(
                 f"✍️ Draft All Remaining ({len(undrafted)} sections)",
                 type="primary", use_container_width=True
             ):
                 for idx, section in enumerate(structure):
-                    name = section["name"]
+                    name = section.get("name", f"Section_{idx + 1}")
                     if name in drafts:
                         continue
                     with st.spinner(f"Drafting {idx+1}/{len(structure)}: {name}..."):
-                        context = _build_drafting_context(structure, drafts)
-                        draft_result = draft_section(
-                            section, context,
-                            agent_bus=st.session_state.agent_bus,
-                            tracer=get_tracer(),
-                            governance_context=st.session_state.get("governance_context"),
-                        )
-                        drafts[name] = draft_result.content
+                        try:
+                            context = _build_drafting_context(structure, drafts)
+                            draft_result = draft_section(
+                                section, context,
+                                agent_bus=st.session_state.agent_bus,
+                                tracer=get_tracer(),
+                                governance_context=st.session_state.get("governance_context"),
+                            )
+                            drafts[name] = draft_result.content
+                        except Exception as e:
+                            logger.error("Failed to draft section '%s': %s", name, e)
+                            drafts[name] = f"[DRAFTING FAILED: {e}]\n\nPlease re-draft this section manually."
                 st.rerun()
 
             st.divider()
 
         for i, section in enumerate(structure):
-            name = section["name"]
+            name = section.get("name", f"Section_{i + 1}")
             is_drafted = name in drafts
 
             with st.expander(f"{'✅' if is_drafted else '⬜'} {name}", expanded=not is_drafted):
@@ -1762,7 +1778,7 @@ def render_phase_drafting():
     st.divider()
     if structure and len(drafts) >= len(structure):
         # AG-M8: Run Orchestrator routing check before allowing completion
-        if "drafting_routing_done" not in st.session_state:
+        if not st.session_state.get("drafting_routing_done"):
             if st.button("Run Final Review", type="secondary", use_container_width=True):
                 with st.spinner("Running orchestrator final review..."):
                     tracer = get_tracer()
@@ -1774,18 +1790,23 @@ def render_phase_drafting():
                         tracer,
                         governance_context=st.session_state.get("governance_context"),
                     )
-                    st.session_state["drafting_routing"] = insights
+                    # Store as plain dict (not Pydantic object) for Streamlit serialization safety
+                    st.session_state["drafting_routing"] = {
+                        "can_proceed": insights.can_proceed,
+                        "requires_human_review": insights.requires_human_review,
+                        "message_to_human": insights.message_to_human,
+                        "flags": [{"text": f.text, "severity": f.severity.value} for f in insights.flags],
+                    }
                     st.session_state["drafting_routing_done"] = True
                     st.rerun()
         else:
-            routing = st.session_state.get("drafting_routing")
-            if routing and routing.message_to_human:
-                st.info(f"Orchestrator: {routing.message_to_human}")
-            if routing and routing.flags:
-                for flag in routing.flags:
-                    st.warning(f"{flag.severity.value}: {flag.text}")
+            routing = st.session_state.get("drafting_routing") or {}
+            if routing.get("message_to_human"):
+                st.info(f"Orchestrator: {routing['message_to_human']}")
+            for flag in routing.get("flags", []):
+                st.warning(f"{flag.get('severity', 'MEDIUM')}: {flag.get('text', '')}")
             can_export = True
-            if routing and not routing.can_proceed:
+            if routing and not routing.get("can_proceed", True):
                 st.warning("Orchestrator recommends review before export.")
                 can_export = st.checkbox("I have reviewed the drafts and wish to proceed", key="drafting_override")
             if can_export:

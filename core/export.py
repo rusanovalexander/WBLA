@@ -272,8 +272,8 @@ def _add_inline_formatted(paragraph, text: str):
         elif part.startswith("*") and part.endswith("*"):
             run = paragraph.add_run(part[1:-1])
             run.font.italic = True
-        elif part.strip():
-            # Clean remaining markdown
+        elif part:
+            # Clean remaining markdown (preserve whitespace-only parts for word spacing)
             clean = re.sub(r"\*([^*]+)\*", r"\1", part)
             paragraph.add_run(clean)
 
