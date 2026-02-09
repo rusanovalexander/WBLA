@@ -265,30 +265,43 @@ def render_phase_setup():
     st.subheader("📁 Documents")
     docs = scan_data_folder()
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("**Teasers:**")
-        for f in docs.get("teasers", []):
+    # --- Teaser upload ---
+    st.markdown("**Deal Teaser** (required)")
+    if docs.get("teasers"):
+        for f in docs["teasers"]:
             st.write(f"📄 {Path(f).name}")
-    with col2:
-        st.markdown("**Examples:**")
-        for f in docs.get("examples", []):
-            st.write(f"📄 {Path(f).name}")
-
-    uploaded = st.file_uploader(
-        "Upload additional documents",
+    uploaded_teaser = st.file_uploader(
+        "Upload deal teaser",
         type=["pdf", "docx", "txt", "xlsx", "xls", "csv", "png", "jpg", "html", "htm", "json", "pptx"],
-        accept_multiple_files=True,
+        accept_multiple_files=False,
+        key="setup_teaser_upload",
     )
-    if uploaded:
-        for f in uploaded:
-            dest = TEASERS_FOLDER / f.name
-            with open(dest, "wb") as out:
-                out.write(f.getbuffer())
-            st.success(f"Uploaded: {f.name}")
+    if uploaded_teaser:
+        dest = TEASERS_FOLDER / uploaded_teaser.name
+        with open(dest, "wb") as out:
+            out.write(uploaded_teaser.getbuffer())
+        st.success(f"Uploaded teaser: {uploaded_teaser.name}")
+
+    # --- Example credit pack upload ---
+    st.markdown("**Example Credit Pack** (optional — used as style/structure reference for drafting)")
+    if docs.get("examples"):
+        for f in docs["examples"]:
+            st.write(f"📄 {Path(f).name}")
+    uploaded_example = st.file_uploader(
+        "Upload example credit pack",
+        type=["pdf", "docx", "txt"],
+        accept_multiple_files=False,
+        key="setup_example_upload",
+    )
+    if uploaded_example:
+        dest = EXAMPLES_FOLDER / uploaded_example.name
+        with open(dest, "wb") as out:
+            out.write(uploaded_example.getbuffer())
+        st.success(f"Uploaded example: {uploaded_example.name}")
 
     if st.button("📋 Load Documents & Start", type="primary", use_container_width=True):
         with st.spinner("Loading documents..."):
+            # Re-scan to pick up any freshly uploaded files
             docs = scan_data_folder()
             if docs["teasers"]:
                 result = tool_load_document(docs["teasers"][0], force_ocr=True)
@@ -305,7 +318,7 @@ def render_phase_setup():
                 _advance_phase("ANALYSIS")
                 st.rerun()
             else:
-                st.error("No teaser document found. Add a file to data/teasers/")
+                st.error("No teaser document found. Upload a teaser file above.")
 
 
 # =============================================================================
