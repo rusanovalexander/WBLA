@@ -339,9 +339,9 @@ def render_phase_analysis():
                     governance_context=st.session_state.get("governance_context"),
                 )
 
-                st.session_state.extracted_data = result["full_analysis"]
-                st.session_state.process_path = result["process_path"]
-                st.session_state.origination_method = result["origination_method"]
+                st.session_state.extracted_data = result.get("full_analysis", "") or ""
+                st.session_state.process_path = result.get("process_path", "") or ""
+                st.session_state.origination_method = result.get("origination_method", "") or ""
                 st.session_state.procedure_sources = result.get("procedure_sources", {})
                 st.session_state.assessment_reasoning = result.get("assessment_reasoning", "")
                 st.session_state.origination_reasoning = result.get("origination_reasoning", "")
@@ -349,8 +349,8 @@ def render_phase_analysis():
                 st.session_state.decision_confidence = result.get("decision_confidence", "NONE")
 
                 decision = create_process_decision(
-                    result["process_path"], result["origination_method"],
-                    result["full_analysis"], result.get("procedure_sources", {}),
+                    result.get("process_path") or "", result.get("origination_method") or "",
+                    result.get("full_analysis", "") or "", result.get("procedure_sources", {}),
                     result.get("assessment_reasoning", ""),
                     result.get("origination_reasoning", ""),
                     result.get("decision_found", False),

@@ -357,12 +357,12 @@ def run_agentic_analysis(
     decision = _extract_structured_decision(raw["full_analysis"], tracer)
 
     if decision:
-        raw["process_path"] = decision["assessment_approach"]
-        raw["origination_method"] = decision["origination_method"]
-        raw["assessment_reasoning"] = decision.get("assessment_reasoning", "")
-        raw["origination_reasoning"] = decision.get("origination_reasoning", "")
-        raw["decision_found"] = True
-        raw["decision_confidence"] = decision.get("confidence", "MEDIUM")
+        raw["process_path"] = decision.get("assessment_approach") or ""
+        raw["origination_method"] = decision.get("origination_method") or ""
+        raw["assessment_reasoning"] = decision.get("assessment_reasoning") or ""
+        raw["origination_reasoning"] = decision.get("origination_reasoning") or ""
+        raw["decision_found"] = bool(raw["process_path"] and raw["origination_method"])
+        raw["decision_confidence"] = decision.get("confidence") or "MEDIUM"
         raw["fallback_used"] = False
     else:
         # NO SILENT DEFAULT — flag it clearly
@@ -1459,8 +1459,8 @@ def create_process_decision(
             reasoning = "Agent could not determine — requires human decision"
 
     return ProcessDecision(
-        assessment_approach=process_path,
-        origination_method=origination_method,
+        assessment_approach=process_path or "Unknown — requires human decision",
+        origination_method=origination_method or "Unknown — requires human decision",
         evidence=ProcessDecisionEvidence(
             deal_size=deal_size,
             reasoning=reasoning,
