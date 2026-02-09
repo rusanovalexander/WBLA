@@ -73,15 +73,35 @@ try:
 except ImportError:
     pass
 
+# Also catch google.genai SDK errors (wraps 429/5xx differently from api_core)
+try:
+    from google.genai.errors import ClientError as GenaiClientError, ServerError as GenaiServerError
+    RETRYABLE_EXCEPTIONS = (*RETRYABLE_EXCEPTIONS, GenaiServerError)
+    # GenaiClientError includes 429 (retryable) but also 400/403 (not retryable)
+    # We handle 429 ClientError via a custom retry predicate below
+except ImportError:
+    GenaiClientError = None
+
+
+def _is_retryable(exception: BaseException) -> bool:
+    """Check if an exception is retryable (rate limit or transient error)."""
+    if isinstance(exception, RETRYABLE_EXCEPTIONS):
+        return True
+    # google.genai.errors.ClientError with 429 status
+    if GenaiClientError and isinstance(exception, GenaiClientError):
+        status = getattr(exception, 'status', 0) or getattr(exception, 'code', 0)
+        return status == 429
+    return False
+
 
 # =============================================================================
 # Core LLM Call
 # =============================================================================
 
 @retry(
-    retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=30),
+    retry=_is_retryable,
+    stop=stop_after_attempt(4),
+    wait=wait_exponential(multiplier=2, min=4, max=60),
     reraise=True,
 )
 def _call_gemini(
@@ -180,10 +200,10 @@ def call_llm(
                 success=True,
             )
 
-        except RETRYABLE_EXCEPTIONS:
-            raise  # Let tenacity handle retry
-
         except Exception as e:
+            # If retryable (429, 503, etc.), re-raise to let tenacity retry
+            if _is_retryable(e):
+                raise
             error_msg = f"[LLM ERROR: {type(e).__name__}: {e}]"
             logger.error("LLM call failed for %s: %s", agent_name, e, exc_info=True)
             tracer.record(agent_name, "ERROR", str(e)[:200])
@@ -289,9 +309,9 @@ def call_llm_with_backoff(
 # =============================================================================
 
 @retry(
-    retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=30),
+    retry=_is_retryable,
+    stop=stop_after_attempt(4),
+    wait=wait_exponential(multiplier=2, min=4, max=60),
     reraise=True,
 )
 def _call_gemini_streaming(
@@ -383,10 +403,10 @@ def call_llm_streaming(
                 success=True,
             )
 
-        except RETRYABLE_EXCEPTIONS:
-            raise  # Let tenacity handle retry
-
         except Exception as e:
+            # If retryable, re-raise to let tenacity retry
+            if _is_retryable(e):
+                raise
             error_msg = f"[LLM ERROR: {type(e).__name__}: {e}]"
             logger.error("Streaming LLM call failed for %s: %s", agent_name, e, exc_info=True)
             tracer.record(agent_name, "ERROR", str(e)[:200])

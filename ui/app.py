@@ -1794,10 +1794,10 @@ def render_phase_drafting():
                     tracer = get_tracer()
                     insights = run_orchestrator_decision(
                         "DRAFTING",
-                        st.session_state.extracted_data or "",
-                        st.session_state.compliance_result or "",
-                        st.session_state.process_path or "",
-                        tracer=tracer,
+                        {"Analysis": (st.session_state.extracted_data or "")[:3000]},
+                        {"Compliance": (st.session_state.compliance_result or "")[:3000],
+                         "Process Path": st.session_state.process_path or ""},
+                        tracer,
                         governance_context=st.session_state.get("governance_context"),
                     )
                     st.session_state["drafting_routing"] = insights
