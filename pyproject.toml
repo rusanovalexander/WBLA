@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "credit-pack-poc"
+version = "3.2.0"
+description = "Multi-Agent System for Automated Credit Pack Drafting"
+requires-python = ">=3.10"
+dependencies = [
+    # Google Cloud
+    "google-cloud-aiplatform>=1.38.0",
+    "google-cloud-discoveryengine>=0.11.0",
+    "google-cloud-documentai>=2.20.0",
+    "google-genai>=1.0.0",
+    # Document processing
+    "PyMuPDF>=1.23.0",
+    "python-docx>=1.0.0",
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.0",
+    # UI
+    "streamlit>=1.28.0",
+    # Data validation
+    "pydantic>=2.0.0",
+    # Resilience
+    "tenacity>=8.2.0",
+    # Utilities
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+observability = [
+    "langfuse>=2.0.0",
+]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
