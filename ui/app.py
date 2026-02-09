@@ -1709,7 +1709,7 @@ def render_phase_drafting():
         st.progress(len(drafts) / max(len(structure), 1))
 
         # Draft All button
-        undrafted = [s for s in structure if s.get("name", f"Section_{i}") not in drafts]
+        undrafted = [s for i, s in enumerate(structure) if s.get("name", f"Section_{i + 1}") not in drafts]
         if undrafted:
             if st.button(
                 f"✍️ Draft All Remaining ({len(undrafted)} sections)",

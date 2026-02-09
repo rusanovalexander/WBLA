@@ -151,12 +151,15 @@ MAX_CONTEXT_TOKENS = 100_000
 # =============================================================================
 # Thinking Budget Configuration (gemini-2.5-pro/flash thinking control)
 # =============================================================================
-# 0 = disabled (extraction tasks — pure JSON output)
+# 128 = minimum for gemini-2.5-pro (cannot disable thinking)
 # 2048 = light thinking (tool-calling loops, routing decisions)
 # 4096 = standard thinking (agent analysis, drafting)
 # None = model default (no ThinkingConfig set)
+#
+# NOTE: gemini-2.5-pro requires minimum 128 tokens, cannot be set to 0
+# Valid range: 128-32768 tokens. Flash models can use 0 to disable thinking.
 
-THINKING_BUDGET_NONE = 300       # Extraction, JSON parsing, auto-fill
+THINKING_BUDGET_NONE = 300     # Extraction, JSON parsing, auto-fill (min 128 for gemini-2.5-pro)
 THINKING_BUDGET_LIGHT = 2048   # Tool loops, routing, planning
 THINKING_BUDGET_STANDARD = 4096  # Agent analysis, compliance, drafting
 
