@@ -9,7 +9,51 @@ Environment variables:
 """
 
 import os
+import json
+import tempfile
 from pathlib import Path
+
+
+# =============================================================================
+# Streamlit Secrets helper (for Streamlit Community Cloud deployment)
+# =============================================================================
+
+def _get_secret(key: str, default: str = "") -> str:
+    """Read a config value from Streamlit secrets (if available) or env var."""
+    try:
+        import streamlit as st
+        if key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return os.getenv(key, default)
+
+
+def _init_service_account_from_secrets() -> str | None:
+    """
+    If running on Streamlit Cloud with gcp_service_account in secrets,
+    write the key JSON to a temp file and return its path.
+    Returns None if secrets are not available (local dev).
+    """
+    try:
+        import streamlit as st
+        if "gcp_service_account" in st.secrets:
+            sa_info = dict(st.secrets["gcp_service_account"])
+            # Write to a temp file so Google SDKs can find it
+            tmp = tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False, prefix="gcp_sa_"
+            )
+            json.dump(sa_info, tmp)
+            tmp.close()
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
+            return tmp.name
+    except Exception:
+        pass
+    return None
+
+
+# Attempt to load SA key from Streamlit secrets at import time
+_SECRETS_KEY_PATH = _init_service_account_from_secrets()
 
 # =============================================================================
 # Version
@@ -21,21 +65,21 @@ VERSION = "3.2.0"
 # Google Cloud Configuration
 # =============================================================================
 
-PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "your-project-id")
+PROJECT_ID = _get_secret("GOOGLE_CLOUD_PROJECT", "your-project-id")
 
 # Locations
-LOCATION = os.getenv("LOCATION", "us")
-VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", "us-central1")
-SEARCH_LOCATION = os.getenv("SEARCH_LOCATION", "global")
+LOCATION = _get_secret("LOCATION", "us")
+VERTEX_LOCATION = _get_secret("VERTEX_LOCATION", "us-central1")
+SEARCH_LOCATION = _get_secret("SEARCH_LOCATION", "global")
 
-# Authentication
-KEY_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "auth_key.json")
+# Authentication — prefer secrets-derived temp file, then env var, then local file
+KEY_PATH = _SECRETS_KEY_PATH or os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "auth_key.json")
 
 # Document AI
-DOCAI_PROCESSOR_ID = os.getenv("DOCAI_PROCESSOR_ID", "")
+DOCAI_PROCESSOR_ID = _get_secret("DOCAI_PROCESSOR_ID", "")
 
 # Vertex AI Search (RAG)
-DATA_STORE_ID = os.getenv("DATA_STORE_ID", "")
+DATA_STORE_ID = _get_secret("DATA_STORE_ID", "")
 
 # =============================================================================
 # Models
@@ -102,14 +146,32 @@ MAX_CONTEXT_TOKENS = 100_000
 # =============================================================================
 
 def get_credentials():
-    """Get Google Cloud credentials."""
-    if os.path.exists(KEY_PATH):
+    """Get Google Cloud credentials.
+
+    Priority:
+    1. Streamlit secrets (gcp_service_account) → from_service_account_info()
+    2. Key file on disk (local dev) → from_service_account_file()
+    3. Application Default Credentials (ADC) → google.auth.default()
+    """
+    # 1. Try Streamlit secrets (direct dict, no temp file needed)
+    try:
+        import streamlit as st
+        if "gcp_service_account" in st.secrets:
+            from google.oauth2 import service_account
+            sa_info = dict(st.secrets["gcp_service_account"])
+            return service_account.Credentials.from_service_account_info(sa_info)
+    except Exception:
+        pass
+
+    # 2. Try key file on disk
+    if KEY_PATH and os.path.exists(KEY_PATH):
         from google.oauth2 import service_account
         return service_account.Credentials.from_service_account_file(KEY_PATH)
-    else:
-        import google.auth
-        credentials, _ = google.auth.default()
-        return credentials
+
+    # 3. Fall back to ADC
+    import google.auth
+    credentials, _ = google.auth.default()
+    return credentials
 
 
 def setup_environment():
@@ -124,9 +186,18 @@ def setup_environment():
 
 def validate_config() -> dict[str, bool]:
     """Validate configuration and return status dict."""
+    # Credentials are valid if: Streamlit secrets have SA key, OR key file exists on disk
+    has_credentials = bool(_SECRETS_KEY_PATH) or (KEY_PATH and os.path.exists(KEY_PATH))
+    try:
+        import streamlit as st
+        if "gcp_service_account" in st.secrets:
+            has_credentials = True
+    except Exception:
+        pass
+
     status = {
         "project_id": bool(PROJECT_ID and PROJECT_ID != "your-project-id"),
-        "credentials": os.path.exists(KEY_PATH),
+        "credentials": has_credentials,
         "data_store": bool(DATA_STORE_ID),
         "docai_processor": bool(DOCAI_PROCESSOR_ID),
     }
