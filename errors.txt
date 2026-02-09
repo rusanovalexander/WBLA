@@ -1,117 +1,384 @@
-All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 54 (char 300). JSON string (first 300 chars): [
-  {
-    "category": "Loan Purpose Information",
-    "fields": [
-      {
-        "id": 1,
-        "name": "Final Loan Request Letter",
-        "description": "Formal request from the borrower detailing the final loan amount, term, and purpose.",
-        "why_required": "The deal analysis mentions '
-All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 54 (char 300). JSON string (first 300 chars): [
-  {
-    "category": "Loan Purpose Information",
-    "fields": [
-      {
-        "id": 1,
-        "name": "Final Loan Request Letter",
-        "description": "Formal request from the borrower detailing the final loan amount, term, and purpose.",
-        "why_required": "The deal analysis mentions '
-All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 54 (char 300). JSON string (first 300 chars): [
-  {
-    "category": "Loan Purpose Information",
-    "fields": [
-      {
-        "id": 1,
-        "name": "Final Loan Request Letter",
-        "description": "Formal request from the borrower detailing the final loan amount, term, and purpose.",
-        "why_required": "The deal analysis mentions '
-Could not parse JSON from LLM output (10151 chars). First 500 chars:
-<json_output>
-[
-  {
-    "category": "Loan Purpose Information",
-    "fields": [
-      {
-        "id": 1,
-        "name": "Final Loan Request Letter",
-        "description": "Formal request from the borrower detailing the final loan amount, term, and purpose.",
-        "why_required": "The deal analysis mentions 'ca. €39MM' and 'minimum term of 5 years'. This document is needed to confirm the final, precise terms of the request. It directly addresses Procedure requirement (i) 'Information on the
-[...]
-Last 200 chars:
- We must ensure that this new loan will not cause a breach of any existing covenants the fund has, particularly regarding leverage.",
-        "priority": "IMPORTANT",
-        "typical_source": "Borrow
-All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 34 column 958 (char 4217). JSON string (first 300 chars): [
-  {
-    "id": 1,
-    "value": "The loan is for the financing of the acquisition of Polderzicht Retailpark.",
-    "source_quote": "DRZ Real Estate is requesting an up to 50% LTV senior loan (ca. €39MM) for the financing of the acquisition, for a minimum term of 5 years"
-  },
-  {
-    "id": 3,
-    "v
-All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 199 (char 633). JSON string (first 300 chars): [
-  {
-    "name": "Decision Sheet",
-    "description": "Executive summary for the Project Vesting deal. Recommends approval for the ~€39M senior loan to OPPF for the Polderzicht Retailpark acquisition. Highlights key metrics (50% LTV, 11.5% DY), strong sponsorship by DRZ Real Estate, and the prime a
-────────────────────────── Traceback (most recent call last) ───────────────────────────
-  C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\streamlit\runtime\scr
-  iptrunner\exec_code.py:129 in exec_func_with_error_handling
+[     UTC     ] Logs for ikb4nwcapqbjyaq9gmyr8r.streamlit.app/
 
-  C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\streamlit\runtime\scr
-  iptrunner\script_runner.py:672 in code_to_exec
-
-  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-main_v3\ui\app.py:1832 in <module>
-
-    1829
-    1830
-    1831 if __name__ == "__main__":
-  ❱ 1832 │   main()
-    1833
-
-  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-main_v3\ui\app.py:1826 in main
-
-    1823 │   elif phase == "DRAFTING":
-    1824 │   │   render_phase_drafting()
-    1825 │   elif phase == "COMPLETE":
-  ❱ 1826 │   │   render_phase_complete()
-    1827 │   else:
-    1828 │   │   render_phase_setup()
-    1829
-
-  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-main_v3\ui\app.py:1773 in render_phase_complete
-
-    1770 │   │   else:
-    1771 │   │   │   if st.button("📋 Generate Audit Trail", use_container_width=True)
-    1772 │   │   │   │   with st.spinner("Generating audit trail..."):
-  ❱ 1773 │   │   │   │   │   path = generate_audit_trail(dict(st.session_state), get_t
-    1774 │   │   │   │   │   if path:
-    1775 │   │   │   │   │   │   st.session_state["_audit_path"] = path
-    1776 │   │   │   │   │   │   st.rerun()
-
-  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-main_v3\core\export.py:437 in generate_audit_trail
-
-    434 │   output_path = output_dir / filename
-    435 │
-    436 │   with open(output_path, "w") as f:
-  ❱ 437 │   │   f.write("\n".join(lines))
-    438 │
-    439 │   logger.info("Audit trail saved: %s", output_path)
-    440 │   return str(output_path)
-
-  C:\Program Files\Python312\Lib\encodings\cp1252.py:19 in encode
-
-     16
-     17 class IncrementalEncoder(codecs.IncrementalEncoder):
-     18 │   def encode(self, input, final=False):
-  ❱  19 │   │   return codecs.charmap_encode(input,self.errors,encoding_table)[0]
-     20
-     21 class IncrementalDecoder(codecs.IncrementalDecoder):
-     22 │   def decode(self, input, final=False):
 ────────────────────────────────────────────────────────────────────────────────────────
-UnicodeEncodeError: 'charmap' codec can't encode characters in position 219-268:
-character maps to <undefined>
+
+[17:18:54] 🖥 Provisioning machine...
+
+[17:18:54] 🎛 Preparing system...
+
+[17:18:54] ⛓ Spinning up manager process...
+
+[17:18:50] 🚀 Starting up repository: 'wbla', branch: 'main', main module: 'ui/app.py'
+
+[17:18:50] 🐙 Cloning repository...
+
+[17:18:51] 🐙 Cloning into '/mount/src/wbla'...
+
+[17:18:51] 🐙 Cloned repository!
+
+[17:18:51] 🐙 Pulling code changes from Github...
+
+[17:18:52] 📦 Processing dependencies...
+
+
+──────────────────────────────────────── uv ───────────────────────────────────────────
+
+
+Using uv pip install.
+
+Using Python 3.13.12 environment at /home/adminuser/venv
+
+Resolved 81 packages in 2.00s
+
+Prepared 81 packages in 5.02s
+
+Installed 81 packages in 274ms
+
+ + altair==6.0.0
+
+ + annotated-types==0.7.0
+
+ + anyio==4.12.1
+
+ + attrs==25.4.0
+
+ + blinker==1.9.0
+
+ + cachetools==6.2.6
+
+ + certifi==2026.1.4
+
+ + cffi==2.0.0
+
+ + charset-normalizer==3.4.4
+
+ + click==8.3.1
+
+ + cryptography==46.0.4
+
+ + distro==1.9.0
+
+ + docstring-parser==0.17.0
+
+ + et-xmlfile==2.0.0
+
+ + gitdb==4.0.12
+
+ + gitpython==3.1.46
+
+ + google-api-core==2.29.0
+
+ + google-auth==2.48.0
+
+ + google-cloud-aiplatform==1.136.0
+
+ + google-cloud-bigquery==3.40.0
+
+ + google-cloud-core==2.5.0
+
+ + google-cloud-discoveryengine==0.16.0
+
+ + google-cloud-documentai==3.9.0
+
+ + google-cloud-resource-manager==1.16.0
+
+ + google-cloud-storage==3.9.0
+
+ + google-crc32c==1.8.0
+
+ + google-genai==1.62.0
+
+ + google-resumable-media==2.8.0
+
+ + googleapis-common-protos==1.72.0
+
+ + grpc-google-iam-v1==0.14.3
+
+ + grpcio==1.78.0
+
+ + grpcio-status==1.78.0
+
+ + h11==0.16.0
+
+ + httpcore==1.0.9
+
+ + httpx==0.28.1
+
+ + idna==3.11
+
+ + jinja2==3.1.6
+
+ + jsonschema==4.26.0
+
+ + jsonschema-specifications==2025.9.1
+
+ + lxml==6.0.2
+
+ + markupsafe==3.0.3
+
+ + narwhals==2.16.0
+
+ + numpy==2.4.2
+
+ + openpyxl==3.1.5
+
+ + packaging==26.0
+
+ + pandas==2.3.3
+
+ + pillow==12.1.0
+
+ + proto-plus==1.27.1
+
+ + protobuf==6.33.5
+
+ + pyarrow==23.0.0
+
+ + pyasn1==0.6.2
+
+ + pyasn1-modules==0.4.2
+
+ + pycparser==3.0
+
+ + pydantic==2.12.5
+
+ + pydantic-core==2.41.5
+
+ + pydeck==0.9.1
+
+ + pymupdf==1.26.7
+
+ + python-dateutil==2.9.0.post0
+
+ + python-docx==1.2.0
+
+ + python-dotenv==1.2.1
+
+ + python-pptx==1.0.2
+
+ + pytz==2025.2
+
+ + referencing==0.37.0[2026-02-09 17:19:00.148873] 
+
+ + requests==2.32.5
+
+ + rpds-py==0.30.0
+
+ + rsa==4.9.1
+
+ + six==1.17.0
+
+ + smmap==5.0.2
+
+ + sniffio==1.3.1
+
+ + streamlit==1.54.0
+
+ + tabulate==0.9.0
+
+ + tenacity==9.1.4
+
+ + toml==0.10.2
+
+ + tornado==6.5.4
+
+ + typing-extensions==4.15.0
+
+ + typing-inspection==0.4.2
+
+ + tzdata==2025.3
+
+ + urllib3==2.6.3
+
+ + watchdog==6.0.0
+
+ + websockets==15.0.1
+
+ + xlsxwriter==3.2.9
+
+Checking if Streamlit is installed
+
+Found Streamlit version 1.54.0 in the environment
+
+Installing rich for an improved exception logging
+
+Using uv pip install.
+
+Using Python 3.13.12 environment at /home/adminuser/venv
+
+Resolved [2026-02-09 17:19:03.034323] 4 packages in 129ms
+
+Prepared 4 packages in 194ms
+
+Installed 4 packages in 19ms
+
+ + markdown-it-py==4.0.0
+
+ + mdurl==0.1.2
+
+ + pygments==[2026-02-09 17:19:03.250682] 2.19.2
+
+ + rich==14.3.2
+
+
+────────────────────────────────────────────────────────────────────────────────────────
+
+
+[17:19:04] 🐍 Python dependencies were installed from /mount/src/wbla/requirements.txt using uv.
+
+[17:19:04] 📦 WARN: More than one requirements file detected in the repository. Available options: uv /mount/src/wbla/requirements.txt, poetry /mount/src/wbla/pyproject.toml. Used: uv with /mount/src/wbla/requirements.txt
+
+Check if streamlit is installed
+
+Streamlit is already installed
+
+[17:19:05] 📦 Processed dependencies!
+
+
+
+
+[17:19:10] 🐙 Pulling code changes from Github...
+
+[17:19:10] 📦 Processing dependencies...
+
+[17:19:10] 📦 Processed dependencies!
+
+[17:19:12] 🔄 Updated app!
+
+────────────────────── Traceback (most recent call last) ───────────────────────
+
+  /home/adminuser/venv/lib/python3.13/site-packages/streamlit/runtime/scriptru  
+
+  nner/exec_code.py:129 in exec_func_with_error_handling                        
+
+                                                                                
+
+  /home/adminuser/venv/lib/python3.13/site-packages/streamlit/runtime/scriptru  
+
+  nner/script_runner.py:689 in code_to_exec                                     
+
+                                                                                
+
+  /mount/src/wbla/ui/app.py:1889 in <module>                                    
+
+                                                                                
+
+    1886                                                                        
+
+    1887                                                                        
+
+    1888 if __name__ == "__main__":                                             
+
+  ❱ 1889 │   main()                                                             
+
+    1890                                                                        
+
+                                                                                
+
+  /mount/src/wbla/ui/app.py:1875 in main                                        
+
+                                                                                
+
+    1872 │   if phase == "SETUP":                                               
+
+    1873 │   │   render_phase_setup()                                           
+
+    1874 │   elif phase == "ANALYSIS":                                          
+
+  ❱ 1875 │   │   render_phase_analysis()                                        
+
+    1876 │   elif phase == "PROCESS_GAPS":                                      
+
+    1877 │   │   render_phase_process_gaps()                                    
+
+    1878 │   elif phase == "COMPLIANCE":                                        
+
+                                                                                
+
+  /mount/src/wbla/ui/app.py:351 in render_phase_analysis                        
+
+                                                                                
+
+     348 │   │   │   │   st.session_state.decision_found = result.get("decisio  
+
+     349 │   │   │   │   st.session_state.decision_confidence = result.get("de  
+
+     350 │   │   │   │                                                          
+
+  ❱  351 │   │   │   │   decision = create_process_decision(                    
+
+     352 │   │   │   │   │   result["process_path"], result["origination_metho  
+
+     353 │   │   │   │   │   result["full_analysis"], result.get("procedure_so  
+
+     354 │   │   │   │   │   result.get("assessment_reasoning", ""),            
+
+                                                                                
+
+  /mount/src/wbla/core/orchestration.py:1461 in create_process_decision         
+
+                                                                                
+
+    1458 │   │   else:                                                          
+
+    1459 │   │   │   reasoning = "Agent could not determine — requires human d  
+
+    1460 │                                                                      
+
+  ❱ 1461 │   return ProcessDecision(                                            
+
+    1462 │   │   assessment_approach=process_path,                              
+
+    1463 │   │   origination_method=origination_method,                         
+
+    1464 │   │   evidence=ProcessDecisionEvidence(                              
+
+                                                                                
+
+  /home/adminuser/venv/lib/python3.13/site-packages/pydantic/main.py:250 in     
+
+  __init__                                                                      
+
+                                                                                
+
+     247 │   │   """                                                            
+
+     248 │   │   # `__tracebackhide__` tells pytest and some other tools to om  
+
+     249 │   │   __tracebackhide__ = True                                       
+
+  ❱  250 │   │   validated_self = self.__pydantic_validator__.validate_python(  
+
+     251 │   │   if self is not validated_self:                                 
+
+     252 │   │   │   warnings.warn(                                             
+
+     253 │   │   │   │   'A custom validator is returning a value other than `  
+
+────────────────────────────────────────────────────────────────────────────────
+
+ValidationError: 2 validation errors for ProcessDecision
+
+assessment_approach
+
+  Input should be a valid string [type=string_type, input_value=None, 
+
+input_type=NoneType]
+
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+
+origination_method
+
+  Input should be a valid string [type=string_type, input_value=None, 
+
+input_type=NoneType]
+
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+
+[17:26:22] 🐙 Pulling code changes from Github...
+
+[17:26:23] 📦 Processing dependencies...
+
+[17:26:23] 📦 Processed dependencies!
+
+[17:26:24] 🔄 Updated app!
