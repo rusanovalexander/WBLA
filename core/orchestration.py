@@ -99,13 +99,20 @@ COMPLIANCE_EXTRACTION_PROMPT = """You are a JSON extraction assistant. Extract A
 ## TASK
 Extract every compliance criterion the agent checked into a JSON array.
 
-IMPORTANT: The analysis above may contain compliance checks in:
+IMPORTANT: The analysis above may contain compliance checks in MANY formats:
 - Markdown tables with columns like Criterion | Guideline Limit | Deal Value | Status
 - Bullet points with PASS/FAIL/REVIEW assessments
 - Numbered lists of criteria checks
 - Summary tables at the end
+- Narrative paragraphs discussing whether something meets a requirement
+- Sections titled "COMPLIANCE MATRIX", "COMPLIANCE THINKING", "SUMMARY" etc.
+- Any statement comparing a deal value to a guideline limit/requirement
 
-Scan the ENTIRE text above and extract EVERY criterion that was assessed.
+Even if the text is mostly narrative, extract any assessment where the agent:
+- Compared a deal value to a guideline limit
+- Stated something passes or fails a requirement
+- Mentioned a criterion was met, not met, or needs review
+- Used ✅, ⚠️, ❌, or words like "compliant", "exceeds", "breaches", "within limit"
 
 CRITICAL FORMATTING RULES:
 - You MUST output ONLY valid JSON with NO text before or after
@@ -128,12 +135,14 @@ CRITICAL FORMATTING RULES:
 </json_output>
 
 EXTRACTION RULES:
-- Include EVERY criterion the agent assessed — look through the entire text
+- Include EVERY criterion the agent assessed — look through the ENTIRE text
 - Map emoji statuses: ✅ = "PASS", ❌ = "FAIL", ⚠️ = "REVIEW", ℹ️ = "N/A"
+- Map narrative: "meets" / "compliant" / "within" = "PASS"; "exceeds limit" / "breaches" = "FAIL"; "close to" / "borderline" = "REVIEW"
 - status must be exactly one of: "PASS", "FAIL", "REVIEW", "N/A"
 - severity must be exactly one of: "MUST", "SHOULD"
 - If a criterion was assessed but status is unclear, use "REVIEW"
-- If no compliance checks found at all, return empty array: []
+- You MUST extract at least one check if the text discusses ANY compliance assessment
+- Only return empty array [] if the text contains absolutely NO compliance assessments
 
 NOW: Extract ALL compliance checks. Output ONLY the JSON array between <json_output></json_output> tags with NO other text.
 """
@@ -312,6 +321,41 @@ def _regex_extract_compliance_table(compliance_text: str, tracer: TraceStore) ->
 
     if checks:
         tracer.record("Extraction", "REGEX_PARSE", f"Found {len(checks)} checks from markdown tables")
+        return checks
+
+    # If no table rows found, try extracting from emoji-based narrative lines
+    # e.g., "✅ LTV: 65% (limit: 80%) - PASS" or "❌ DSCR: 1.1x (minimum: 1.2x)"
+    emoji_pattern = re.compile(
+        r'[✅⚠️❌ℹ️]\s*\**([^:|\n]+?)\**\s*[:—–-]\s*(.+)',
+        re.MULTILINE,
+    )
+    for match in emoji_pattern.finditer(compliance_text):
+        criterion = match.group(1).strip().strip("*")
+        detail = match.group(2).strip()
+        line_full = match.group(0)
+
+        if "✅" in line_full:
+            status = "PASS"
+        elif "❌" in line_full:
+            status = "FAIL"
+        elif "⚠" in line_full:
+            status = "REVIEW"
+        else:
+            status = "N/A"
+
+        if criterion and len(criterion) > 2 and len(criterion) < 200:
+            checks.append({
+                "criterion": criterion,
+                "guideline_limit": "",
+                "deal_value": detail[:200],
+                "status": status,
+                "evidence": detail[:300],
+                "reference": "",
+                "severity": "MUST" if "must" in detail.lower() else "SHOULD",
+            })
+
+    if checks:
+        tracer.record("Extraction", "REGEX_NARRATIVE", f"Found {len(checks)} checks from narrative lines")
 
     return checks
 
@@ -847,9 +891,9 @@ Follow the OUTPUT_STRUCTURE from your instructions.
         tool_executor=executor,
         model=AGENT_MODELS.get("compliance_advisor", MODEL_PRO),
         temperature=0.0,
-        max_tokens=12000,
+        max_tokens=32000,
         agent_name="ComplianceAdvisor",
-        max_tool_rounds=5,
+        max_tool_rounds=8,
         tracer=tracer,
     )
 
@@ -953,7 +997,7 @@ Using the Guidelines search results above:
 Include ALL applicable criteria found in the Guidelines.
 """
 
-    result = call_llm(assessment_prompt, MODEL_PRO, 0.0, 12000, "ComplianceAdvisor", tracer)
+    result = call_llm(assessment_prompt, MODEL_PRO, 0.0, 32000, "ComplianceAdvisor", tracer)
     return result.text
 
 
