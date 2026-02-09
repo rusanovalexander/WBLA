@@ -91,60 +91,43 @@ EXTRACTION RULES:
 NOW: Extract the decision from the analysis text above. Output ONLY the JSON between <json_output></json_output> tags with NO other text.
 """
 
-COMPLIANCE_EXTRACTION_PROMPT = """You are a JSON extraction assistant. Extract ALL compliance checks from the analysis below.
+COMPLIANCE_EXTRACTION_PROMPT = """Extract ALL compliance checks from the text below into a JSON array. Do NOT think or explain — go straight to the JSON output.
 
 ## COMPLIANCE ANALYSIS TEXT
 {compliance_text}
 
-## TASK
-Extract every compliance criterion the agent checked into a JSON array.
+## TASK — DIRECT EXTRACTION, NO REASONING
 
-IMPORTANT: The analysis above may contain compliance checks in MANY formats:
-- Markdown tables with columns like Criterion | Guideline Limit | Deal Value | Status
-- Bullet points with PASS/FAIL/REVIEW assessments
-- Numbered lists of criteria checks
-- Summary tables at the end
-- Narrative paragraphs discussing whether something meets a requirement
-- Sections titled "COMPLIANCE MATRIX", "COMPLIANCE THINKING", "SUMMARY" etc.
-- Any statement comparing a deal value to a guideline limit/requirement
+Scan the ENTIRE text above. For every criterion the agent assessed, emit one JSON object.
 
-Even if the text is mostly narrative, extract any assessment where the agent:
-- Compared a deal value to a guideline limit
-- Stated something passes or fails a requirement
-- Mentioned a criterion was met, not met, or needs review
-- Used ✅, ⚠️, ❌, or words like "compliant", "exceeds", "breaches", "within limit"
+Look for compliance checks in ALL formats:
+- Tables: Criterion | Limit | Value | Status
+- Bullets with PASS/FAIL/REVIEW
+- Narrative: "meets requirement", "exceeds limit", "compliant", "breaches"
+- Emojis: ✅ = PASS, ❌ = FAIL, ⚠️ = REVIEW, ℹ️ = N/A
 
-CRITICAL FORMATTING RULES:
-- You MUST output ONLY valid JSON with NO text before or after
-- Do NOT include markdown code fences like ```json
-- Do NOT include explanations, preambles, or any other text
-- Output ONLY the JSON array between the <json_output></json_output> tags below
+RULES:
+- Output ONLY JSON between <json_output></json_output> tags — NO other text, NO reasoning
+- status: exactly "PASS", "FAIL", "REVIEW", or "N/A"
+- severity: exactly "MUST" or "SHOULD"
+- You MUST extract at least one check if ANY compliance assessment exists in the text
+- Only return [] if the text contains absolutely ZERO compliance assessments
 
 <json_output>
 [
   {{
-    "criterion": "<name of the criterion>",
-    "guideline_limit": "<the limit or requirement from the Guidelines>",
-    "deal_value": "<the deal's actual value for this criterion>",
+    "criterion": "<criterion name>",
+    "guideline_limit": "<guideline limit/requirement>",
+    "deal_value": "<actual deal value>",
     "status": "PASS",
-    "evidence": "<brief reasoning or quote>",
-    "reference": "<Guidelines section reference if available>",
+    "evidence": "<brief reasoning>",
+    "reference": "<section ref if available>",
     "severity": "MUST"
   }}
 ]
 </json_output>
 
-EXTRACTION RULES:
-- Include EVERY criterion the agent assessed — look through the ENTIRE text
-- Map emoji statuses: ✅ = "PASS", ❌ = "FAIL", ⚠️ = "REVIEW", ℹ️ = "N/A"
-- Map narrative: "meets" / "compliant" / "within" = "PASS"; "exceeds limit" / "breaches" = "FAIL"; "close to" / "borderline" = "REVIEW"
-- status must be exactly one of: "PASS", "FAIL", "REVIEW", "N/A"
-- severity must be exactly one of: "MUST", "SHOULD"
-- If a criterion was assessed but status is unclear, use "REVIEW"
-- You MUST extract at least one check if the text discusses ANY compliance assessment
-- Only return empty array [] if the text contains absolutely NO compliance assessments
-
-NOW: Extract ALL compliance checks. Output ONLY the JSON array between <json_output></json_output> tags with NO other text.
+NOW: Extract ALL checks. Output ONLY <json_output> tags with JSON array inside.
 """
 
 
@@ -221,14 +204,17 @@ def _extract_compliance_checks(
         compliance_text=text_for_extraction
     )
 
-    # Try up to 3 times with varying temperature
+    # --- Strategy 1: Full-text LLM extraction (3 attempts with increasing tokens) ---
     last_output = ""
+    # gemini-2.5-pro uses "thinking" tokens within the budget, so we need generous limits
+    token_budgets = [16000, 24000, 32000]
     for attempt in range(3):
         temperature = [0.0, 0.1, 0.2][attempt]
+        max_tok = token_budgets[attempt]
 
-        tracer.record("Extraction", "ATTEMPT", f"Attempt {attempt + 1}/3 (temp={temperature})")
+        tracer.record("Extraction", "ATTEMPT", f"Attempt {attempt + 1}/3 (temp={temperature}, max_tokens={max_tok})")
 
-        result = call_llm(prompt, MODEL_FLASH, temperature, 10000, "Extraction", tracer)
+        result = call_llm(prompt, MODEL_FLASH, temperature, max_tok, "Extraction", tracer)
         # AG-H3: Check LLM success before using output
         if not result.success:
             tracer.record("Extraction", "LLM_FAIL", result.error or "Unknown")
@@ -249,7 +235,34 @@ def _extract_compliance_checks(
             tracer.record("Extraction", "SUCCESS", f"Extracted {len(validated_checks)} checks")
             return validated_checks
 
-    # LLM extraction failed — try regex fallback on markdown tables
+        # If LLM returned empty array explicitly, try with a shorter text chunk
+        # (shorter input = less thinking = more room for actual output)
+        if parsed is not None and isinstance(parsed, list) and len(parsed) == 0 and attempt < 2:
+            tracer.record("Extraction", "EMPTY_ARRAY", f"LLM returned [] on attempt {attempt + 1}, will retry with more tokens")
+
+    # --- Strategy 2: Chunk-based extraction (last resort before regex) ---
+    # If full text failed, try extracting from the LAST portion of the text
+    # (compliance matrices / summary tables are typically at the end)
+    if len(compliance_text) > 8000:
+        tracer.record("Extraction", "CHUNK_FALLBACK", "Trying extraction from last 15k chars only")
+        tail_text = compliance_text[-15000:]
+        tail_prompt = COMPLIANCE_EXTRACTION_PROMPT.format(compliance_text=tail_text)
+        tail_result = call_llm(tail_prompt, MODEL_FLASH, 0.0, 24000, "Extraction", tracer)
+        if tail_result.success:
+            last_output = tail_result.text
+            tail_parsed = safe_extract_json(tail_result.text, "array")
+            if tail_parsed and isinstance(tail_parsed, list) and len(tail_parsed) > 0:
+                validated_checks = []
+                for check_data in tail_parsed:
+                    try:
+                        validated = ComplianceCheck.model_validate(check_data)
+                        validated_checks.append(validated.model_dump())
+                    except Exception:
+                        validated_checks.append(check_data)
+                tracer.record("Extraction", "CHUNK_SUCCESS", f"Tail extraction got {len(validated_checks)} checks")
+                return validated_checks
+
+    # --- Strategy 3: Regex fallback on markdown tables ---
     tracer.record("Extraction", "FALLBACK", "LLM extraction failed, trying regex table parse")
     fallback_checks = _regex_extract_compliance_table(compliance_text, tracer)
     if fallback_checks:
@@ -257,7 +270,7 @@ def _extract_compliance_checks(
         return fallback_checks
 
     # Everything failed
-    tracer.record("Extraction", "FAILED", "Could not extract checks after 3 LLM attempts + regex fallback")
+    tracer.record("Extraction", "FAILED", "Could not extract checks after LLM + chunk + regex fallback")
     logger.error("Compliance extraction failed. Last LLM output (first 1000 chars): %s", last_output[:1000])
     return []
 
