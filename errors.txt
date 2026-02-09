@@ -1,191 +1,86 @@
-All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 42 (char 254). JSON string (first 300 chars): [
+[22:19:32] 🐍 Python dependencies were installed from /mount/src/wbla/requirements.txt using uv.
 
-  {
+[22:19:32] 📦 WARN: More than one requirements file detected in the repository. Available options: uv /mount/src/wbla/requirements.txt, poetry /mount/src/wbla/pyproject.toml. Used: uv with /mount/src/wbla/requirements.txt
 
-    "category": "Purpose of Application",
+Check if streamlit is installed
 
-    "fields": [
+Streamlit is already installed
 
-      {
+[22:19:33] 📦 Processed dependencies!
 
-        "id": 1,
 
-        "name": "Purpose of the Loan",
 
-        "description": "A clear statement defining the use of the requested funds.",
 
-        "why_required": "Procedure item 'i' requires information on the loan's purpose 
+────────────────────── Traceback (most recent call last) ───────────────────────
 
-All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 42 (char 254). JSON string (first 300 chars): [
+  /home/adminuser/venv/lib/python3.13/site-packages/streamlit/runtime/scriptru  
 
-  {
+  nner/exec_code.py:129 in exec_func_with_error_handling                        
 
-    "category": "Purpose of Application",
+                                                                                
 
-    "fields": [
+  /home/adminuser/venv/lib/python3.13/site-packages/streamlit/runtime/scriptru  
 
-      {
+  nner/script_runner.py:689 in code_to_exec                                     
 
-        "id": 1,
+                                                                                
 
-        "name": "Purpose of the Loan",
+  /mount/src/wbla/ui/app.py:1947 in <module>                                    
 
-        "description": "A clear statement defining the use of the requested funds.",
+                                                                                
 
-        "why_required": "Procedure item 'i' requires information on the loan's purpose 
+    1944                                                                        
 
-All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 42 (char 254). JSON string (first 300 chars): [
+    1945                                                                        
 
-  {
+    1946 if __name__ == "__main__":                                             
 
-    "category": "Purpose of Application",
+  ❱ 1947 │   main()                                                             
 
-    "fields": [
+    1948                                                                        
 
-      {
+                                                                                
 
-        "id": 1,
+  /mount/src/wbla/ui/app.py:1939 in main                                        
 
-        "name": "Purpose of the Loan",
+                                                                                
 
-        "description": "A clear statement defining the use of the requested funds.",
+    1936 │   elif phase == "COMPLIANCE":                                        
 
-        "why_required": "Procedure item 'i' requires information on the loan's purpose 
+    1937 │   │   render_phase_compliance()                                      
 
-Could not parse JSON from LLM output (7010 chars). First 500 chars:
+    1938 │   elif phase == "DRAFTING":                                          
 
-<json_output>
+  ❱ 1939 │   │   render_phase_drafting()                                        
 
-[
+    1940 │   elif phase == "COMPLETE":                                          
 
-  {
+    1941 │   │   render_phase_complete()                                        
 
-    "category": "Purpose of Application",
+    1942 │   else:                                                              
 
-    "fields": [
+                                                                                
 
-      {
+  /mount/src/wbla/ui/app.py:1712 in render_phase_drafting                       
 
-        "id": 1,
+                                                                                
 
-        "name": "Purpose of the Loan",
+    1709 │   │   st.progress(len(drafts) / max(len(structure), 1))              
 
-        "description": "A clear statement defining the use of the requested funds.",
+    1710 │   │                                                                  
 
-        "why_required": "Procedure item 'i' requires information on the loan's purpose for all credit applications. This is an acquisition financing for the Polderzicht Retailpark.",
+    1711 │   │   # Draft All button                                             
 
-        "priority": "CRITICAL",
+  ❱ 1712 │   │   undrafted = [s for s in structure if s.get("name", f"Section_  
 
-        "typical_source": "Sponsor"
+    1713 │   │   if undrafted:                                                  
 
-      },
+    1714 │   │   │   if st.button(                                              
 
-      {
+    1715 │   │   │   │   f"✍️ Draft All Remaining ({len(undrafted)} sections)"  
 
-     
+────────────────────────────────────────────────────────────────────────────────
 
-[...]
+UnboundLocalError: cannot access local variable 'i' where it is not associated 
 
-Last 200 chars:
-
-ning Report",
-
-        "description": "Official documentation and/or a legal opinion on the asset's zoning.",
-
-        "why_required": "The deal analysis highlights a 'rare' and favorable zoning plan as
-
-All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 42 (char 254). JSON string (first 300 chars): [
-
-  {
-
-    "category": "Purpose of Application",
-
-    "fields": [
-
-      {
-
-        "id": 1,
-
-        "name": "Purpose of the Loan",
-
-        "description": "A clear statement defining the use of the requested funds.",
-
-        "why_required": "Procedure item 'i' requires information on the loan's purpose 
-
-All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 42 (char 254). JSON string (first 300 chars): [
-
-  {
-
-    "category": "Purpose of Application",
-
-    "fields": [
-
-      {
-
-        "id": 1,
-
-        "name": "Purpose of the Loan",
-
-        "description": "A clear statement defining the use of the requested funds.",
-
-        "why_required": "Procedure item 'i' requires information on the loan's purpose 
-
-All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 9 column 42 (char 254). JSON string (first 300 chars): [
-
-  {
-
-    "category": "Purpose of Application",
-
-    "fields": [
-
-      {
-
-        "id": 1,
-
-        "name": "Purpose of the Loan",
-
-        "description": "A clear statement defining the use of the requested funds.",
-
-        "why_required": "Procedure item 'i' requires information on the loan's purpose 
-
-Could not parse JSON from LLM output (7010 chars). First 500 chars:
-
-<json_output>
-
-[
-
-  {
-
-    "category": "Purpose of Application",
-
-    "fields": [
-
-      {
-
-        "id": 1,
-
-        "name": "Purpose of the Loan",
-
-        "description": "A clear statement defining the use of the requested funds.",
-
-        "why_required": "Procedure item 'i' requires information on the loan's purpose for all credit applications. This is an acquisition financing for the Polderzicht Retailpark.",
-
-        "priority": "CRITICAL",
-
-        "typical_source": "Sponsor"
-
-      },
-
-      {
-
-     
-
-[...]
-
-Last 200 chars:
-
-ning Report",
-
-        "description": "Official documentation and/or a legal opinion on the asset's zoning.",
-
-        "why_required": "The deal analysis highlights a 'rare' and favorable zoning plan as
+with a value
