@@ -85,8 +85,8 @@ DATA_STORE_ID = _get_secret("DATA_STORE_ID", "")
 # Models
 # =============================================================================
 
-MODEL_PRO = os.getenv("MODEL_PRO", "gemini-2.0-flash-exp")  # Stable, fast, cost-effective
-MODEL_FLASH = os.getenv("MODEL_FLASH", "gemini-2.0-flash-exp")  # Use same for consistency
+MODEL_PRO = os.getenv("MODEL_PRO", "gemini-2.5-pro")  # Stable, fast, cost-effective
+MODEL_FLASH = os.getenv("MODEL_FLASH", "gemini-2.0-pro")  # Use same for consistency
 
 # Agent model assignments
 AGENT_MODELS = {
