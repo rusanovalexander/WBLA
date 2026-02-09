@@ -1,23 +1,380 @@
-All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 3 column 12 (char 17). JSON string (first 300 chars): [
+[17:55:48] 🐍 Python dependencies were installed from /mount/src/wbla/requirements.txt using uv.
 
-  {
+[17:55:48] 📦 WARN: More than one requirements file detected in the repository. Available options: uv /mount/src/wbla/requirements.txt, poetry /mount/src/wbla/pyproject.toml. Used: uv with /mount/src/wbla/requirements.txt
 
-    "id": 3]}
+Check if streamlit is installed
 
-Could not parse JSON from LLM output (479 chars). First 500 chars:
+Streamlit is already installed
 
-<json_output>
+[17:55:49] 📦 Processed dependencies!
 
-[
 
-  {
 
-    "id": 3,
 
-    "value": "Sponsor: DRZ Real Estate, the global private real estate investment management arm of De Ruyter & Zonen Capital.\nParent Group AUM: $1.9Tn (DRZ Investment Management Client AUM as of Aug 31, 2025).\nDRZ Real Estate AUM: $46Bn (as of Aug 31, 2025).\nExperience: 35+ years of real estate investing experience.\nTeam: 220+ dedicated professionals.\nGlobal Reach: Offices across 14 countries.\nAUM by Strategy: Core/Core-Plus 86%, Value
+Streaming LLM call failed for Writer: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.', 'status': 'RESOURCE_EXHAUSTED'}}
 
-[...]
+Traceback (most recent call last):
 
-Last 200 chars:
+  File "/mount/src/wbla/core/llm_client.py", line 365, in call_llm_streaming
 
- Aug 31, 2025).\nExperience: 35+ years of real estate investing experience.\nTeam: 220+ dedicated professionals.\nGlobal Reach: Offices across 14 countries.\nAUM by Strategy: Core/Core-Plus 86%, Value
+    result_text = _call_gemini_streaming(
+
+        prompt=prompt,
+
+    ...<3 lines>...
+
+        on_chunk=on_chunk,
+
+    )
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 331, in wrapped_f
+
+    return copy(f, *args, **kw)
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 470, in __call__
+
+    do = self.iter(retry_state=retry_state)
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 371, in iter
+
+    result = action(retry_state)
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 393, in <lambda>
+
+    self._add_action_func(lambda rs: rs.outcome.result())
+
+                                     ~~~~~~~~~~~~~~~~~^^
+
+  File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 449, in result
+
+    return self.__get_result()
+
+           ~~~~~~~~~~~~~~~~~^^
+
+  File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+
+    raise self._exception
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 473, in __call__
+
+    result = fn(*args, **kwargs)
+
+  File "/mount/src/wbla/core/llm_client.py", line 320, in _call_gemini_streaming
+
+    for chunk in client.models.generate_content_stream(
+
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+
+        model=model,
+
+        ^^^^^^^^^^^^
+
+        contents=prompt,
+
+        ^^^^^^^^^^^^^^^^
+
+        config=config,
+
+        ^^^^^^^^^^^^^^
+
+    ):
+
+    ^
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/google/genai/models.py", line 5651, in generate_content_stream
+
+    for chunk in response:
+
+                 ^^^^^^^^
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/google/genai/models.py", line 4307, in _generate_content_stream
+
+    for response in self._api_client.request_streamed(
+
+                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+
+        'post', path, request_dict, http_options
+
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    ):
+
+    ^
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1403, in request_streamed
+
+    session_response = self._request(http_request, http_options, stream=True)
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1222, in _request
+
+    return self._retry(self._request_once, http_request, stream)  # type: ignore[no-any-return]
+
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 470, in __call__
+
+    do = self.iter(retry_state=retry_state)
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 371, in iter
+
+    result = action(retry_state)
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 413, in exc_check
+
+    raise retry_exc.reraise()
+
+          ~~~~~~~~~~~~~~~~~^^
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 184, in reraise
+
+    raise self.last_attempt.result()
+
+          ~~~~~~~~~~~~~~~~~~~~~~~~^^
+
+  File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 449, in result
+
+    return self.__get_result()
+
+           ~~~~~~~~~~~~~~~~~^^
+
+  File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+
+    raise self._exception
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/tenacity/__init__.py", line 473, in __call__
+
+    result = fn(*args, **kwargs)
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1187, in _request_once
+
+    errors.APIError.raise_for_response(response)
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/google/genai/errors.py", line 134, in raise_for_response
+
+    cls.raise_error(response.status_code, response_json, response)
+
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  File "/home/adminuser/venv/lib/python3.13/site-packages/google/genai/errors.py", line 159, in raise_error
+
+    raise ClientError(status_code, response_json, response)
+
+google.genai.errors.ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.', 'status': 'RESOURCE_EXHAUSTED'}}
+
+────────────────────── Traceback (most recent call last) ───────────────────────
+
+  /home/adminuser/venv/lib/python3.13/site-packages/streamlit/runtime/scriptru  
+
+  nner/exec_code.py:129 in exec_func_with_error_handling                        
+
+                                                                                
+
+  /home/adminuser/venv/lib/python3.13/site-packages/streamlit/runtime/scriptru  
+
+  nner/script_runner.py:689 in code_to_exec                                     
+
+                                                                                
+
+  /mount/src/wbla/ui/app.py:1952 in <module>                                    
+
+                                                                                
+
+    1949                                                                        
+
+    1950                                                                        
+
+    1951 if __name__ == "__main__":                                             
+
+  ❱ 1952 │   main()                                                             
+
+    1953                                                                        
+
+                                                                                
+
+  /mount/src/wbla/ui/app.py:1944 in main                                        
+
+                                                                                
+
+    1941 │   elif phase == "COMPLIANCE":                                        
+
+    1942 │   │   render_phase_compliance()                                      
+
+    1943 │   elif phase == "DRAFTING":                                          
+
+  ❱ 1944 │   │   render_phase_drafting()                                        
+
+    1945 │   elif phase == "COMPLETE":                                          
+
+    1946 │   │   render_phase_complete()                                        
+
+    1947 │   else:                                                              
+
+                                                                                
+
+  /mount/src/wbla/ui/app.py:1795 in render_phase_drafting                       
+
+                                                                                
+
+    1792 │   │   │   if st.button("Run Final Review", type="secondary", use_co  
+
+    1793 │   │   │   │   with st.spinner("Running orchestrator final review...  
+
+    1794 │   │   │   │   │   tracer = get_tracer()                              
+
+  ❱ 1795 │   │   │   │   │   insights = run_orchestrator_decision(              
+
+    1796 │   │   │   │   │   │   "DRAFTING",                                    
+
+    1797 │   │   │   │   │   │   st.session_state.extracted_data or "",         
+
+    1798 │   │   │   │   │   │   st.session_state.compliance_result or "",      
+
+────────────────────────────────────────────────────────────────────────────────
+
+TypeError: run_orchestrator_decision() got multiple values for argument 'tracer'
+
+────────────────────── Traceback (most recent call last) ───────────────────────
+
+  /home/adminuser/venv/lib/python3.13/site-packages/streamlit/runtime/scriptru  
+
+  nner/exec_code.py:129 in exec_func_with_error_handling                        
+
+                                                                                
+
+  /home/adminuser/venv/lib/python3.13/site-packages/streamlit/runtime/scriptru  
+
+  nner/script_runner.py:689 in code_to_exec                                     
+
+                                                                                
+
+  /mount/src/wbla/ui/app.py:1952 in <module>                                    
+
+                                                                                
+
+    1949                                                                        
+
+    1950                                                                        
+
+    1951 if __name__ == "__main__":                                             
+
+  ❱ 1952 │   main()                                                             
+
+    1953                                                                        
+
+                                                                                
+
+  /mount/src/wbla/ui/app.py:1944 in main                                        
+
+                                                                                
+
+    1941 │   elif phase == "COMPLIANCE":                                        
+
+    1942 │   │   render_phase_compliance()                                      
+
+    1943 │   elif phase == "DRAFTING":                                          
+
+  ❱ 1944 │   │   render_phase_drafting()                                        
+
+    1945 │   elif phase == "COMPLETE":                                          
+
+    1946 │   │   render_phase_complete()                                        
+
+    1947 │   else:                                                              
+
+                                                                                
+
+  /mount/src/wbla/ui/app.py:1795 in render_phase_drafting                       
+
+                                                                                
+
+    1792 │   │   │   if st.button("Run Final Review", type="secondary", use_co  
+
+    1793 │   │   │   │   with st.spinner("Running orchestrator final review...  
+
+    1794 │   │   │   │   │   tracer = get_tracer()                              
+
+  ❱ 1795 │   │   │   │   │   insights = run_orchestrator_decision(              
+
+    1796 │   │   │   │   │   │   "DRAFTING",                                    
+
+    1797 │   │   │   │   │   │   st.session_state.extracted_data or "",         
+
+    1798 │   │   │   │   │   │   st.session_state.compliance_result or "",      
+
+────────────────────────────────────────────────────────────────────────────────
+
+TypeError: run_orchestrator_decision() got multiple values for argument 'tracer'
+
+────────────────────── Traceback (most recent call last) ───────────────────────
+
+  /home/adminuser/venv/lib/python3.13/site-packages/streamlit/runtime/scriptru  
+
+  nner/exec_code.py:129 in exec_func_with_error_handling                        
+
+                                                                                
+
+  /home/adminuser/venv/lib/python3.13/site-packages/streamlit/runtime/scriptru  
+
+  nner/script_runner.py:689 in code_to_exec                                     
+
+                                                                                
+
+  /mount/src/wbla/ui/app.py:1952 in <module>                                    
+
+                                                                                
+
+    1949                                                                        
+
+    1950                                                                        
+
+    1951 if __name__ == "__main__":                                             
+
+  ❱ 1952 │   main()                                                             
+
+    1953                                                                        
+
+                                                                                
+
+  /mount/src/wbla/ui/app.py:1944 in main                                        
+
+                                                                                
+
+    1941 │   elif phase == "COMPLIANCE":                                        
+
+    1942 │   │   render_phase_compliance()                                      
+
+    1943 │   elif phase == "DRAFTING":                                          
+
+  ❱ 1944 │   │   render_phase_drafting()                                        
+
+    1945 │   elif phase == "COMPLETE":                                          
+
+    1946 │   │   render_phase_complete()                                        
+
+    1947 │   else:                                                              
+
+                                                                                
+
+  /mount/src/wbla/ui/app.py:1795 in render_phase_drafting                       
+
+                                                                                
+
+    1792 │   │   │   if st.button("Run Final Review", type="secondary", use_co  
+
+    1793 │   │   │   │   with st.spinner("Running orchestrator final review...  
+
+    1794 │   │   │   │   │   tracer = get_tracer()                              
+
+  ❱ 1795 │   │   │   │   │   insights = run_orchestrator_decision(              
+
+    1796 │   │   │   │   │   │   "DRAFTING",                                    
+
+    1797 │   │   │   │   │   │   st.session_state.extracted_data or "",         
+
+    1798 │   │   │   │   │   │   st.session_state.compliance_result or "",      
+
+────────────────────────────────────────────────────────────────────────────────
+
+TypeError: run_orchestrator_decision() got multiple values for argument 'tracer'
