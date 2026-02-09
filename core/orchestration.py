@@ -42,10 +42,10 @@ from models.schemas import (
     SectionDraft,
     AgentMessage,
 )
-from agents.orchestrator import ORCHESTRATOR_INSTRUCTION
-from agents.process_analyst import PROCESS_ANALYST_INSTRUCTION
-from agents.compliance_advisor import COMPLIANCE_ADVISOR_INSTRUCTION
-from agents.writer import WRITER_INSTRUCTION
+from agents.orchestrator import ORCHESTRATOR_INSTRUCTION, get_orchestrator_instruction
+from agents.process_analyst import PROCESS_ANALYST_INSTRUCTION, get_process_analyst_instruction
+from agents.compliance_advisor import COMPLIANCE_ADVISOR_INSTRUCTION, get_compliance_advisor_instruction
+from agents.writer import WRITER_INSTRUCTION, get_writer_instruction
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +205,7 @@ def run_agentic_analysis(
     search_procedure_fn: Callable,
     tracer: TraceStore | None = None,
     use_native_tools: bool = True,
+    governance_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Agentic analysis — Process Analyst autonomously searches Procedure.
@@ -218,16 +219,19 @@ def run_agentic_analysis(
 
     tracer.record("ProcessAnalyst", "START", "Beginning agentic teaser analysis")
 
+    # Build governance-aware instruction
+    pa_instruction = get_process_analyst_instruction(governance_context)
+
     # Try native function calling first
     if use_native_tools:
         try:
-            raw = _run_analysis_native(teaser_text, search_procedure_fn, tracer)
+            raw = _run_analysis_native(teaser_text, search_procedure_fn, tracer, pa_instruction)
         except Exception as e:
             logger.warning("Native tool calling failed, falling back to text-based: %s", e)
             tracer.record("ProcessAnalyst", "FALLBACK", f"Native tools failed: {e}")
-            raw = _run_analysis_text_based(teaser_text, search_procedure_fn, tracer)
+            raw = _run_analysis_text_based(teaser_text, search_procedure_fn, tracer, pa_instruction)
     else:
-        raw = _run_analysis_text_based(teaser_text, search_procedure_fn, tracer)
+        raw = _run_analysis_text_based(teaser_text, search_procedure_fn, tracer, pa_instruction)
 
     # Structured extraction — replaces keyword parsing
     decision = _extract_structured_decision(raw["full_analysis"], tracer)
@@ -261,6 +265,7 @@ def _run_analysis_native(
     teaser_text: str,
     search_procedure_fn: Callable,
     tracer: TraceStore,
+    instruction: str = "",
 ) -> dict[str, Any]:
     """Analysis using native Gemini function calling."""
     from tools.function_declarations import get_agent_tools, create_tool_executor
@@ -275,7 +280,9 @@ def _run_analysis_native(
         search_rag_fn=lambda q, n=3: {"status": "ERROR", "results": []},
     )
 
-    prompt = f"""{PROCESS_ANALYST_INSTRUCTION}
+    pa_instr = instruction or PROCESS_ANALYST_INSTRUCTION
+
+    prompt = f"""{pa_instr}
 
 ## YOUR TASK NOW
 
@@ -322,11 +329,14 @@ def _run_analysis_text_based(
     teaser_text: str,
     search_procedure_fn: Callable,
     tracer: TraceStore,
+    instruction: str = "",
 ) -> dict[str, Any]:
     """Analysis using text-based tool calls (fallback)."""
 
+    pa_instr = instruction or PROCESS_ANALYST_INSTRUCTION
+
     # Step 1: Planning — agent decides what to search
-    planning_prompt = f"""{PROCESS_ANALYST_INSTRUCTION}
+    planning_prompt = f"""{pa_instr}
 
 ## YOUR TASK NOW
 
@@ -387,7 +397,7 @@ Output ONLY your queries, one per line, using this format:
 
     rag_context = format_rag_results(procedure_results)
 
-    analysis_prompt = f"""{PROCESS_ANALYST_INSTRUCTION}
+    analysis_prompt = f"""{pa_instr}
 
 ## TEASER DOCUMENT
 
@@ -430,7 +440,7 @@ You MUST cite specific Procedure sections. Do NOT guess limits — only use valu
 # Dynamic Requirements Discovery (replaces static 28 fields)
 # =============================================================================
 
-REQUIREMENTS_DISCOVERY_PROMPT = """You are a credit analyst. Based on this deal analysis and the determined process path, identify ALL information requirements needed for the credit pack.
+REQUIREMENTS_DISCOVERY_PROMPT = """You are a credit analyst. Based on this deal analysis, the determined process path, and the governance document context below, identify ALL information requirements needed for the credit pack.
 
 ## DEAL ANALYSIS
 {analysis_text}
@@ -439,14 +449,20 @@ REQUIREMENTS_DISCOVERY_PROMPT = """You are a credit analyst. Based on this deal 
 Assessment Approach: {assessment_approach}
 Origination Method: {origination_method}
 
+## GOVERNANCE CONTEXT (from Procedure document)
+{procedure_rag_context}
+
+{governance_categories}
+
 ## INSTRUCTIONS
 
-Identify requirements SPECIFIC to this deal. Consider:
-1. What does the process path require? (A more comprehensive assessment needs more data than a lighter one)
-2. What asset class is this? (A hotel deal needs ADR/RevPAR; an office deal needs rent roll/WAULT)
-3. What parties are involved? (Sponsor-backed? Guarantors? JV partners?)
-4. What special features exist? (Construction? Acquisition? Refinancing? Multi-asset?)
-5. What jurisdiction? (Different regulatory requirements)
+Identify requirements SPECIFIC to this deal. You MUST ground your requirements
+in the Procedure document context above:
+1. What does the Procedure say is required for THIS origination method / assessment approach?
+2. What additional information is needed given the deal's asset class and parties?
+3. What does the process path require? (More comprehensive = more data)
+4. What special features exist that trigger additional requirements?
+5. Only add fields beyond what the Procedure mandates if deal characteristics clearly require them.
 
 For EACH requirement, explain WHY it's needed for THIS specific deal.
 
@@ -457,13 +473,13 @@ You MUST output ONLY valid JSON between XML tags, with NO other text:
 <json_output>
 [
   {{
-    "category": "DEAL INFORMATION",
+    "category": "<category name from Procedure or deal analysis>",
     "fields": [
       {{
         "id": 1,
-        "name": "Facility Amount",
-        "description": "Total facility amount with currency",
-        "why_required": "Core parameter for all credit assessments",
+        "name": "<field name>",
+        "description": "<what this field captures>",
+        "why_required": "<why needed for THIS deal, citing Procedure if possible>",
         "priority": "CRITICAL",
         "typical_source": "teaser"
       }}
@@ -478,6 +494,7 @@ RULES:
 - Every field must have a "why_required" explaining its relevance to THIS deal
 - Mark priority as CRITICAL (blocks assessment), IMPORTANT (needed for quality), or SUPPORTING (nice to have)
 - Do NOT include a fixed template — adapt to the deal
+- If Procedure context is available, use its categories and terminology
 
 CRITICAL:
 - Output ONLY the JSON array between <json_output></json_output> tags
@@ -494,9 +511,12 @@ def discover_requirements(
     assessment_approach: str,
     origination_method: str,
     tracer: TraceStore | None = None,
+    search_procedure_fn: Callable | None = None,
+    governance_context: dict | None = None,
 ) -> list[dict]:
     """
-    Dynamically discover requirements based on deal analysis and process path.
+    Dynamically discover requirements based on deal analysis, process path,
+    and governance documents (via RAG).
 
     Returns flat list of requirement dicts ready for the UI.
     """
@@ -505,10 +525,41 @@ def discover_requirements(
 
     tracer.record("RequirementsDiscovery", "START", "Discovering deal-specific requirements")
 
+    # --- RAG grounding: search Procedure for requirements specific to this path ---
+    procedure_rag_context = "(No Procedure context available — using general knowledge.)"
+    if search_procedure_fn:
+        om = origination_method or "credit assessment"
+        aa = assessment_approach or "credit assessment"
+        rag_queries = [
+            f"information requirements for {om}",
+            f"required data fields {aa} credit assessment",
+            f"what information must be provided for {om} origination",
+        ]
+        rag_results: dict[str, Any] = {}
+        for query in rag_queries:
+            tracer.record("RequirementsDiscovery", "RAG_SEARCH", f"Procedure: {query[:60]}")
+            try:
+                rag_results[query] = search_procedure_fn(query, 3)
+            except Exception as e:
+                logger.warning("Requirements RAG query failed: %s", e)
+        if rag_results:
+            procedure_rag_context = format_rag_results(rag_results)
+
+    # --- Inject governance-discovered categories if available ---
+    governance_categories = ""
+    if governance_context and governance_context.get("discovery_status") in ("complete", "partial"):
+        cats = governance_context.get("requirement_categories", [])
+        if cats:
+            governance_categories = (
+                "Known requirement categories from Procedure: " + ", ".join(cats)
+            )
+
     prompt = REQUIREMENTS_DISCOVERY_PROMPT.format(
         analysis_text=analysis_text[:8000],
         assessment_approach=assessment_approach or "Not yet determined",
         origination_method=origination_method or "Not yet determined",
+        procedure_rag_context=procedure_rag_context,
+        governance_categories=governance_categories,
     )
 
     result = call_llm(prompt, MODEL_PRO, 0.0, 5000, "RequirementsDiscovery", tracer)
@@ -559,6 +610,7 @@ def run_agentic_compliance(
     search_guidelines_fn: Callable,
     tracer: TraceStore | None = None,
     use_native_tools: bool = True,
+    governance_context: dict[str, Any] | None = None,
 ) -> tuple[str, list[dict]]:
     """
     Agentic compliance — Compliance Advisor autonomously searches Guidelines.
@@ -571,6 +623,15 @@ def run_agentic_compliance(
 
     tracer.record("ComplianceAdvisor", "START", "Beginning agentic compliance check")
 
+    # Build governance-aware instruction
+    ca_instruction = get_compliance_advisor_instruction(governance_context)
+
+    # Build compliance criteria hint from governance context (M7)
+    if governance_context and governance_context.get("compliance_framework"):
+        compliance_criteria_hint = ", ".join(governance_context["compliance_framework"])
+    else:
+        compliance_criteria_hint = "financial ratios, security requirements, sponsor criteria, concentration limits, anything else the Guidelines require"
+
     filled_data = "\n".join([
         f"**{r['name']}:** {r['value']}"
         for r in requirements if r.get("status") == "filled"
@@ -580,19 +641,19 @@ def run_agentic_compliance(
         try:
             result_text = _run_compliance_native(
                 filled_data, teaser_text, extracted_data,
-                search_guidelines_fn, tracer
+                search_guidelines_fn, tracer, ca_instruction, compliance_criteria_hint
             )
         except Exception as e:
             logger.warning("Native compliance tools failed: %s", e)
             tracer.record("ComplianceAdvisor", "FALLBACK", str(e))
             result_text = _run_compliance_text_based(
                 filled_data, teaser_text, extracted_data,
-                search_guidelines_fn, tracer
+                search_guidelines_fn, tracer, ca_instruction, compliance_criteria_hint
             )
     else:
         result_text = _run_compliance_text_based(
             filled_data, teaser_text, extracted_data,
-            search_guidelines_fn, tracer
+            search_guidelines_fn, tracer, ca_instruction, compliance_criteria_hint
         )
 
     # Dynamic extraction — captures ALL criteria the agent checked
@@ -608,6 +669,8 @@ def _run_compliance_native(
     extracted_data: str,
     search_guidelines_fn: Callable,
     tracer: TraceStore,
+    instruction: str = "",
+    compliance_criteria_hint: str = "",
 ) -> str:
     """Compliance using native function calling. Returns raw analysis text."""
     from tools.function_declarations import get_agent_tools, create_tool_executor
@@ -622,7 +685,10 @@ def _run_compliance_native(
         search_rag_fn=lambda q, n=3: {"status": "ERROR", "results": []},
     )
 
-    prompt = f"""{COMPLIANCE_ADVISOR_INSTRUCTION}
+    ca_instr = instruction or COMPLIANCE_ADVISOR_INSTRUCTION
+    criteria_hint = compliance_criteria_hint or "financial ratios, security requirements, sponsor criteria, concentration limits, anything else the Guidelines require"
+
+    prompt = f"""{ca_instr}
 
 ## DEAL DATA
 
@@ -640,7 +706,7 @@ def _run_compliance_native(
 Perform a complete compliance assessment:
 1. Use the search_guidelines tool to look up EVERY applicable limit
 2. Check the deal against each limit you find
-3. Include ALL relevant criteria — financial ratios, security requirements, sponsor criteria, concentration limits, anything else the Guidelines require
+3. Include ALL relevant criteria — {criteria_hint}
 4. You MUST search before making determinations — do not rely on general knowledge
 
 Follow the OUTPUT_STRUCTURE from your instructions.
@@ -667,10 +733,14 @@ def _run_compliance_text_based(
     extracted_data: str,
     search_guidelines_fn: Callable,
     tracer: TraceStore,
+    instruction: str = "",
+    compliance_criteria_hint: str = "",
 ) -> str:
     """Compliance using text-based tool calls (fallback). Returns raw analysis text."""
 
-    planning_prompt = f"""{COMPLIANCE_ADVISOR_INSTRUCTION}
+    ca_instr = instruction or COMPLIANCE_ADVISOR_INSTRUCTION
+
+    planning_prompt = f"""{ca_instr}
 
 ## YOUR TASK NOW
 
@@ -684,7 +754,7 @@ Plan your compliance assessment for this deal.
 
 ## STEP 1: PLANNING
 
-1. What type of deal is this (secured/unsecured PRE)? What asset class?
+1. What type of deal is this? What structure? What asset class?
 2. Which Guidelines sections apply to THIS specific deal?
 3. What specific limits and criteria do you need to verify?
 4. Are there any unusual features that trigger additional checks?
@@ -727,7 +797,7 @@ Each query should target a specific section, limit, or requirement.
 
     rag_context = format_rag_results(guideline_results)
 
-    assessment_prompt = f"""{COMPLIANCE_ADVISOR_INSTRUCTION}
+    assessment_prompt = f"""{ca_instr}
 
 ## GUIDELINES FROM RAG SEARCH
 {rag_context}
@@ -751,7 +821,7 @@ Using the Guidelines search results above:
 3. Only use limits from the search results — do NOT guess or use general knowledge
 4. If a relevant limit was not found in the search, flag it as "UNABLE TO VERIFY — not found in search results"
 
-Include ALL applicable criteria, not just financial ratios.
+Include ALL applicable criteria found in the Guidelines.
 """
 
     result = call_llm(assessment_prompt, MODEL_PRO, 0.0, 12000, "ComplianceAdvisor", tracer)
@@ -815,6 +885,7 @@ def run_orchestrator_decision(
     findings: dict[str, str],
     context: dict[str, str],
     tracer: TraceStore | None = None,
+    governance_context: dict[str, Any] | None = None,
 ) -> OrchestratorInsights:
     """
     Orchestrator analyzes findings and provides ACTIONABLE routing decisions.
@@ -824,7 +895,9 @@ def run_orchestrator_decision(
 
     tracer.record("Orchestrator", "DECISION_POINT", f"Phase: {phase}")
 
-    analysis_prompt = f"""{ORCHESTRATOR_INSTRUCTION}
+    orch_instr = get_orchestrator_instruction(governance_context)
+
+    analysis_prompt = f"""{orch_instr}
 
 ## CURRENT PHASE: {phase}
 
@@ -896,20 +969,66 @@ def generate_section_structure(
     origination_method: str,
     analysis_text: str,
     tracer: TraceStore | None = None,
+    search_procedure_fn: Callable | None = None,
+    governance_context: dict | None = None,
 ) -> list[dict]:
     """
     Generate credit pack section structure adapted to process path and deal type.
+    Now grounded in Procedure document via RAG.
     """
     if tracer is None:
         tracer = get_tracer()
 
     tracer.record("StructureGen", "START", f"Generating structure for {origination_method}")
 
+    # --- RAG grounding: search Procedure for section requirements ---
+    procedure_sections_context = "(No Procedure context available — using general knowledge.)"
+    if search_procedure_fn:
+        om = origination_method or "credit pack"
+        aa = assessment_approach or "credit assessment"
+        rag_queries = [
+            f"required sections for {om} credit pack document",
+            f"content structure {om} origination method",
+            f"section requirements {aa} assessment approach",
+        ]
+        rag_results: dict[str, Any] = {}
+        for query in rag_queries:
+            tracer.record("StructureGen", "RAG_SEARCH", f"Procedure: {query[:60]}")
+            try:
+                rag_results[query] = search_procedure_fn(query, 3)
+            except Exception as e:
+                logger.warning("Structure RAG query failed: %s", e)
+        if rag_results:
+            procedure_sections_context = format_rag_results(rag_results)
+
+    # --- Inject governance-discovered section templates if available ---
+    gov_sections_str = ""
+    if governance_context and governance_context.get("discovery_status") in ("complete", "partial"):
+        templates = governance_context.get("section_templates", {})
+        om_key = origination_method or ""
+        # Try exact match first, then partial match
+        matched_template = templates.get(om_key)
+        if not matched_template:
+            for key, val in templates.items():
+                if key.lower() in om_key.lower() or om_key.lower() in key.lower():
+                    matched_template = val
+                    break
+        if matched_template:
+            gov_sections_str = (
+                f"Procedure-defined sections for '{om_key}': "
+                + json.dumps(matched_template, indent=2)
+            )
+
     prompt = f"""Determine the section structure for this credit pack.
 
 ## PROCESS PATH
 Assessment Approach: {assessment_approach}
 Origination Method: {origination_method}
+
+## PROCEDURE CONTEXT (from governance documents)
+{procedure_sections_context}
+
+{gov_sections_str}
 
 ## DEAL ANALYSIS (excerpt)
 {analysis_text[:3000]}
@@ -919,22 +1038,19 @@ Origination Method: {origination_method}
 
 ## INSTRUCTIONS
 
-Design the section structure for THIS specific credit pack. Consider:
+Design the section structure for THIS specific credit pack:
 
-1. **Origination Method determines scope:**
-   - A more comprehensive origination method (e.g., full credit rationale) → More sections, more detail (7-10 sections)
-   - A condensed origination method (e.g., short form, abbreviated) → Fewer sections (4-6 sections)
-   - A minimal/automated origination method → Fewest sections (3-4 sections)
-   - Use the origination method name above to judge the appropriate scope
+1. **Use the Procedure document above as primary guide:**
+   - If the Procedure specifies required sections for this origination method, use those
+   - The Procedure determines both the NUMBER of sections and their NAMES
+   - Only deviate from the Procedure if the deal has unusual features not covered
 
-2. **Deal type determines content:**
-   - If construction deal → add "Construction Plan & Budget" section
-   - If acquisition → add "Acquisition Rationale" section
-   - If multi-asset → add "Portfolio Overview" section
-   - If hotel/hospitality → add "Operating Performance" section
-   - Adapt to what the deal actually needs
+2. **If the Procedure does not specify sections**, judge scope from the origination method name
+   (more comprehensive origination = more sections, condensed = fewer)
 
-3. **Use the example for style reference, not as a rigid template**
+3. **Adapt section content to the specific deal characteristics** found in the analysis
+
+4. **Use the example for style reference, not as a rigid template**
 
 ## OUTPUT FORMAT
 
@@ -966,6 +1082,7 @@ def draft_section(
     context: dict[str, Any],
     agent_bus: Any = None,
     tracer: TraceStore | None = None,
+    governance_context: dict[str, Any] | None = None,
 ) -> SectionDraft:
     """Draft a credit pack section with full context."""
     if tracer is None:
@@ -998,7 +1115,9 @@ def draft_section(
 {previously_drafted[:6000]}
 """
 
-    prompt = f"""{WRITER_INSTRUCTION}
+    writer_instr = get_writer_instruction(governance_context)
+
+    prompt = f"""{writer_instr}
 
 ## SECTION TO DRAFT: {section_name}
 

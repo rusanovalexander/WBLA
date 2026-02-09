@@ -1,21 +1,47 @@
 """
-Writer Agent - ENHANCED for Level 3
+Writer Agent - DOCUMENT-DRIVEN VERSION
 
-Specializes in:
-- Drafting professional credit pack sections
-- Using example for STYLE only, teaser/data for FACTS
-- Receiving FULL context (no truncation)
-- Agent-to-agent queries for genuine gaps only (Level 3)
-- Marking missing information clearly
-
-Uses visible chain-of-thought reasoning for demo.
+Key changes:
+- Instruction is now a function: get_writer_instruction(governance_context)
+- Section-type content guidance is parameterized from governance context
+- Falls back to sensible defaults when governance context is not available
 """
 
+from __future__ import annotations
+from typing import Any
 
 from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block
 
 
-WRITER_INSTRUCTION = f"""
+def _build_section_type_guidance(governance_context: dict[str, Any] | None) -> str:
+    """Build section-type content guidance from governance context or defaults."""
+    if governance_context and governance_context.get("section_templates"):
+        templates = governance_context["section_templates"]
+        lines = []
+        for method, sections in templates.items():
+            if isinstance(sections, list) and sections:
+                for sec in sections[:12]:
+                    name = sec.get("name", "")
+                    desc = sec.get("description", "")
+                    if name and desc:
+                        lines.append(f"- {name} sections → {desc}")
+        if lines:
+            return "\n".join(lines)
+
+    # Default: generic guidance that works for any deal type
+    return (
+        "- Summary/overview sections → lead with the ask, key terms, recommendation\n"
+        "- Entity sections (borrower/sponsor) → legal structure, ownership, track record, financials\n"
+        "- Asset/property sections → description, location, characteristics, valuation, market position\n"
+        "- Financial sections → historical performance, projections, key ratios, sensitivity\n"
+        "- Risk sections → identified risks, mitigants, residual risk, stress scenarios\n"
+        "- Compliance sections → reference compliance assessment results, exceptions, conditions\n"
+        "- Security sections → package overview, covenants, monitoring\n"
+        "- Recommendation sections → strengths, risks, conditions, approval request"
+    )
+
+
+_WRITER_TEMPLATE = """
 You are the **Writer Agent** (Senior Banker) for a credit pack drafting system.
 
 <ROLE>
@@ -50,8 +76,7 @@ You are an expert in writing professional credit documentation. Your job is to:
 - Use: "per teaser", "as extracted", "per compliance assessment"
 
 **Rule 5: PRECISION**
-- EUR 120,000,000 not "around EUR 120M"
-- 31 December 2024 not "end of 2024"
+- Use exact values, not approximations
 - Exact names, exact figures, exact dates
 </CRITICAL_RULES>
 
@@ -78,14 +103,6 @@ You should have everything you need. However, if something is GENUINELY unclear 
 - Data is already in your context (extracted data, requirements, compliance)
 - You just want confirmation of something you already have
 - Standard information that should be in teaser
-
-**Example of WRONG query:**
-❌ "What is the LTV?" (Already in extracted data)
-❌ "What's the limit for LTV?" (Already in compliance assessment)
-
-**Example of CORRECT query:**
-✅ "The teaser mentions 'board approval' - what does Procedure say about board approval requirements?"
-✅ "Compliance marked sponsor as 'REVIEW' - what specific verification is needed?"
 </LEVEL3_AGENT_QUERIES>
 
 <WRITING_PRINCIPLES>
@@ -111,7 +128,7 @@ You should have everything you need. However, if something is GENUINELY unclear 
 
 <SECTION_WRITING_APPROACH>
 You will receive a specific section to draft, with:
-- **name**: The section title (e.g., "Executive Summary", "Asset Analysis", "Construction Budget")
+- **name**: The section title
 - **description**: What THIS section should cover for THIS deal
 - **detail_level**: "Brief" (0.5-1 page), "Standard" (1-2 pages), or "Detailed" (2-4 pages)
 
@@ -126,23 +143,16 @@ You will receive a specific section to draft, with:
 7. Mark gaps: **[INFORMATION REQUIRED: what's missing]**
 
 **For common section types, typical content includes:**
-- Summary/overview sections → lead with the ask, key terms, recommendation
-- Entity sections (borrower/sponsor) → legal structure, ownership, track record, financials
-- Asset/property sections → description, location, tenant profile, valuation, market position
-- Financial sections → historical performance, projections, key ratios, sensitivity
-- Risk sections → identified risks, mitigants, residual risk, stress scenarios
-- Compliance sections → reference compliance assessment results, exceptions, conditions
-- Security sections → package overview, covenants, monitoring
-- Recommendation sections → strengths, risks, conditions, approval request
+{section_type_guidance}
 
-**For deal-specific sections** (construction, hotel, portfolio, acquisition, etc.):
+**For deal-specific sections:**
 - Use the section description as your primary guide
 - Draw on relevant data from teaser and requirements
 - Structure logically for the topic
 - Apply the same professional banking tone
 </SECTION_WRITING_APPROACH>
 
-{get_verbose_block()}
+{verbose_block}
 
 <OUTPUT_STRUCTURE>
 Structure your response as:
@@ -217,6 +227,18 @@ You have access to:
 Remember: Agent queries should be RARE - you have full context.
 </TOOLS>
 """
+
+
+def get_writer_instruction(governance_context: dict[str, Any] | None = None) -> str:
+    """Build Writer instruction with governance-derived parameters."""
+    return _WRITER_TEMPLATE.format(
+        section_type_guidance=_build_section_type_guidance(governance_context),
+        verbose_block=get_verbose_block(),
+    )
+
+
+# Backward-compatible constant (uses defaults when no governance context)
+WRITER_INSTRUCTION = get_writer_instruction(None)
 
 
 # Create agent config dict

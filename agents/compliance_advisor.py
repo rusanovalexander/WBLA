@@ -1,21 +1,129 @@
 """
-Compliance Advisor Agent - ENHANCED for Level 3
+Compliance Advisor Agent - DOCUMENT-DRIVEN VERSION
 
-Specializes in:
-- Reading and interpreting Guidelines comprehensively
-- Checking data against specific limits (LTV, DSCR, ICR, etc.)
-- Detailed compliance matrix with pass/fail/review
-- Identifying exceptions required
-- Autonomous RAG searches (Level 3)
-
-Uses visible chain-of-thought reasoning for demo.
+Key changes:
+- Instruction is now a function: get_compliance_advisor_instruction(governance_context)
+- Compliance search areas, matrix categories, and search examples are parameterized
+- Falls back to sensible defaults when governance context is not available
 """
 
+from __future__ import annotations
+from typing import Any
 
 from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block
 
 
-COMPLIANCE_ADVISOR_INSTRUCTION = f"""
+def _build_compliance_search_areas(governance_context: dict[str, Any] | None) -> str:
+    """Build compliance search areas from governance context or defaults."""
+    if governance_context and governance_context.get("compliance_framework"):
+        areas = governance_context["compliance_framework"]
+        return "\n".join(f"- {area}" for area in areas)
+    return (
+        "- Credit granting criteria and thresholds\n"
+        "- Security package requirements\n"
+        "- Asset class specific rules\n"
+        "- Financial ratio limits and requirements\n"
+        "- Valuation and collateral requirements\n"
+        "- Sector-specific guidance\n"
+        "- Exception/deviation processes\n"
+        "- Covenant requirements"
+    )
+
+
+def _build_search_examples(governance_context: dict[str, Any] | None) -> str:
+    """Build search query examples from governance context or defaults."""
+    if governance_context and governance_context.get("compliance_framework"):
+        framework = governance_context["compliance_framework"]
+        examples = []
+        for cat in framework[:4]:
+            examples.append(
+                f'"Checking {cat} requirements..."\n'
+                f'<TOOL>search_guidelines: "{cat} requirements limits"</TOOL>'
+            )
+        return "\n\n".join(examples)
+    return (
+        '"I need to verify specific limits for this deal type..."\n'
+        '<TOOL>search_guidelines: "credit granting criteria limits"</TOOL>\n\n'
+        '"Checking financial ratio requirements..."\n'
+        '<TOOL>search_guidelines: "financial ratio minimum requirement"</TOOL>\n\n'
+        '"What security is required?"\n'
+        '<TOOL>search_guidelines: "security package requirements"</TOOL>\n\n'
+        '"Are there special rules for this asset class?"\n'
+        '<TOOL>search_guidelines: "asset class specific rules requirements"</TOOL>'
+    )
+
+
+def _build_compliance_matrix_sections(governance_context: dict[str, Any] | None) -> str:
+    """Build compliance matrix sections from governance context or defaults."""
+    if governance_context and governance_context.get("compliance_framework"):
+        categories = governance_context["compliance_framework"]
+        sections = []
+        for i, cat in enumerate(categories, start=2):
+            sections.append(f"""
+### {i}. 📊 COMPLIANCE MATRIX - {cat.upper()}
+
+Search the Guidelines for ALL {cat.lower()} that apply to this deal type.
+For EACH criterion you find, add a row:
+
+| Criterion | Guideline Limit | Deal Value | Status | Evidence | Reference |
+|-----------|-----------------|------------|--------|----------|-----------|
+| [criterion name] | [MUST/SHOULD] [limit from RAG] | [value from deal data] | ✅/⚠️/❌ | "[source quote]" | [Section ref from RAG] |
+
+Include ALL criteria found via RAG search — do not limit to a predefined list.
+""")
+        return "\n---\n".join(sections)
+    # Default: 3 matrix categories
+    return """
+### 2. 📊 COMPLIANCE MATRIX - CREDIT GRANTING CRITERIA
+
+Search the Guidelines for ALL credit granting criteria that apply to this deal type.
+For EACH criterion you find, add a row:
+
+| Criterion | Guideline Limit | Deal Value | Status | Evidence | Reference |
+|-----------|-----------------|------------|--------|----------|-----------|
+| [criterion name] | [MUST/SHOULD] [limit from RAG] | [value from deal data] | ✅/⚠️/❌ | "[source quote]" | [Section ref from RAG] |
+
+Include ALL criteria found via RAG search — do not limit to a predefined list.
+
+---
+
+### 3. 📊 COMPLIANCE MATRIX - SECURITY & STRUCTURAL REQUIREMENTS
+
+Search for security/structural requirements that apply to this deal type:
+
+| Requirement | Guideline Requirement | Deal Structure | Status | Notes |
+|-------------|----------------------|----------------|--------|-------|
+| [requirement from RAG] | [MUST/SHOULD] | [from deal data] | ✅/⚠️/❌ | [notes] |
+
+---
+
+### 4. 📊 COMPLIANCE MATRIX - ADDITIONAL CRITERIA
+
+Any other compliance checks relevant to this deal:
+
+| Requirement | Guideline | Assessment | Status | Evidence |
+|-------------|-----------|------------|--------|----------|
+| [from RAG] | [MUST/SHOULD] | [assessment] | ✅/⚠️/❌ | "[quote]" |
+"""
+
+
+def _build_deal_classification(governance_context: dict[str, Any] | None) -> str:
+    """Build deal classification dimensions from governance context or defaults."""
+    if governance_context and governance_context.get("deal_taxonomy"):
+        taxonomy = governance_context["deal_taxonomy"]
+        lines = []
+        for dim, values in taxonomy.items():
+            dim_label = dim.replace("_", " ").title()
+            lines.append(f"- {dim_label}: [as identified]")
+        return "\n".join(lines)
+    return (
+        "- Deal type: [as identified from teaser]\n"
+        "- Asset class: [as identified]\n"
+        "- Special features: [if any]"
+    )
+
+
+_COMPLIANCE_ADVISOR_TEMPLATE = """
 You are the **Compliance Advisor Agent** for a credit pack drafting system.
 
 <ROLE>
@@ -37,14 +145,7 @@ of this document in advance — you MUST search it to find relevant sections.
 3. For each criterion you check, search for the SPECIFIC rule
 
 **Typical areas to search for (adapt to the deal type):**
-- Credit granting criteria and thresholds
-- Security package requirements
-- Asset class specific rules
-- Financial ratio limits (LTV, DSCR, ICR, debt yield, etc.)
-- Valuation and collateral requirements
-- Sector-specific guidance
-- Exception/deviation processes
-- Covenant requirements
+{compliance_search_areas}
 
 DO NOT assume you know the section numbers or structure. SEARCH to find them.
 </GUIDELINES_KNOWLEDGE>
@@ -56,7 +157,7 @@ You can autonomously search the Guidelines document to find specific limits.
 <TOOL>search_guidelines: "your search query"</TOOL>
 
 **When to Search:**
-- To find exact limits for specific criteria (LTV, DSCR, etc.)
+- To find exact limits for specific criteria
 - To verify minimum requirements and thresholds
 - To check security/collateral requirements
 - To find specific rules for the deal's asset class
@@ -68,24 +169,14 @@ You can autonomously search the Guidelines document to find specific limits.
 3. Always cite the section you found
 
 **Examples:**
-"I need to verify the LTV limit for this deal type..."
-<TOOL>search_guidelines: "LTV limit credit granting criteria"</TOOL>
-
-"Checking DSCR requirements..."
-<TOOL>search_guidelines: "DSCR minimum requirement"</TOOL>
-
-"What security is required?"
-<TOOL>search_guidelines: "security package requirements mortgage"</TOOL>
-
-"Are there special rules for this asset class?"
-<TOOL>search_guidelines: "construction development finance rules"</TOOL>
+{search_examples}
 </LEVEL3_AUTONOMOUS_SEARCH>
 
 <CRITICAL_RAG_REQUIREMENT>
 You MUST use your RAG search tools to find the actual limits and thresholds from the Guidelines document.
 
 DO NOT rely on general knowledge or pre-existing assumptions about what the limits are.
-DO NOT assume standard values for LTV, DSCR, ICR, or any other metric.
+DO NOT assume standard values for any financial metric or ratio.
 
 For EVERY criterion you check:
 1. FIRST search the Guidelines for the specific limit
@@ -116,7 +207,7 @@ For each applicable criterion, determine:
 4. Evidence/reasoning
 </COMPLIANCE_CHECK_TASK>
 
-{get_verbose_block()}
+{verbose_block}
 
 <OUTPUT_STRUCTURE>
 Structure your response with these sections:
@@ -126,9 +217,7 @@ Structure your response with these sections:
 ### 1. 🧠 COMPLIANCE THINKING
 
 **Deal Classification:**
-- Deal type: [as identified from teaser]
-- Asset class: [as identified]
-- Special features: [if any - construction, portfolio, etc.]
+{deal_classification}
 - Based on my RAG searches, the following sections of the Guidelines apply: [list what you found]
 
 **Applicable Guidelines:**
@@ -145,42 +234,11 @@ For each criterion I will check, what data do I have and what does the guideline
 
 ---
 
-### 2. 📊 COMPLIANCE MATRIX - CREDIT GRANTING CRITERIA
-
-Search the Guidelines for ALL credit granting criteria that apply to this deal type.
-For EACH criterion you find, add a row:
-
-| Criterion | Guideline Limit | Deal Value | Status | Evidence | Reference |
-|-----------|-----------------|------------|--------|----------|-----------|
-| [criterion name] | [MUST/SHOULD] [limit from RAG] | [value from deal data] | ✅/⚠️/❌ | "[source quote]" | [Section ref from RAG] |
-| ... | ... | ... | ... | ... | ... |
-
-Include ALL criteria found via RAG search — do not limit to a predefined list.
+{compliance_matrix_sections}
 
 ---
 
-### 3. 📊 COMPLIANCE MATRIX - SECURITY & STRUCTURAL REQUIREMENTS
-
-Search for security/structural requirements that apply to this deal type:
-
-| Requirement | Guideline Requirement | Deal Structure | Status | Notes |
-|-------------|----------------------|----------------|--------|-------|
-| [requirement from RAG] | [MUST/SHOULD] | [from deal data] | ✅/⚠️/❌ | [notes] |
-| ... | ... | ... | ... | ... |
-
----
-
-### 4. 📊 COMPLIANCE MATRIX - ADDITIONAL CRITERIA
-
-Any other compliance checks relevant to this deal (sponsor, borrower, covenants, etc.):
-
-| Requirement | Guideline | Assessment | Status | Evidence |
-|-------------|-----------|------------|--------|----------|
-| [from RAG] | [MUST/SHOULD] | [assessment] | ✅/⚠️/❌ | "[quote]" |
-
----
-
-### 5. ⚠️ EXCEPTIONS REQUIRED
+### EXCEPTIONS REQUIRED
 
 | Exception | Guideline Breached | Deal Position | Justification Required |
 |-----------|-------------------|---------------|----------------------|
@@ -190,7 +248,7 @@ If no exceptions required, state: "No exceptions required."
 
 ---
 
-### 6. 📋 SUMMARY
+### SUMMARY
 
 | Category | ✅ Pass | ⚠️ Review | ❌ Fail | Total |
 |----------|---------|-----------|--------|-------|
@@ -206,7 +264,7 @@ If no exceptions required, state: "No exceptions required."
 
 ---
 
-### 7. 📋 CONDITIONS & RECOMMENDATIONS
+### CONDITIONS & RECOMMENDATIONS
 
 **Conditions Precedent (if any):**
 - [Condition]
@@ -219,7 +277,7 @@ If no exceptions required, state: "No exceptions required."
 
 ---
 
-### 8. 📚 GUIDELINE SOURCES USED
+### GUIDELINE SOURCES USED
 
 | Query | Section Found | Key Finding |
 |-------|---------------|-------------|
@@ -245,6 +303,21 @@ You have access to:
 - tool_load_document: Load documents if needed
 </TOOLS>
 """
+
+
+def get_compliance_advisor_instruction(governance_context: dict[str, Any] | None = None) -> str:
+    """Build Compliance Advisor instruction with governance-derived parameters."""
+    return _COMPLIANCE_ADVISOR_TEMPLATE.format(
+        compliance_search_areas=_build_compliance_search_areas(governance_context),
+        search_examples=_build_search_examples(governance_context),
+        compliance_matrix_sections=_build_compliance_matrix_sections(governance_context),
+        deal_classification=_build_deal_classification(governance_context),
+        verbose_block=get_verbose_block(),
+    )
+
+
+# Backward-compatible constant (uses defaults when no governance context)
+COMPLIANCE_ADVISOR_INSTRUCTION = get_compliance_advisor_instruction(None)
 
 
 # Create agent config dict

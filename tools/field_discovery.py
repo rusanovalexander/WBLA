@@ -1,27 +1,70 @@
 """
-Dynamic Field Discovery for Credit Pack v3
+Dynamic Field Discovery for Credit Pack v3 — DOCUMENT-DRIVEN VERSION
 
-Analyzes deal characteristics and Procedure to determine which fields
-should be extracted, rather than using hardcoded schemas.
+Key changes:
+- discover_required_fields_prompt() accepts governance_context parameter
+- analyze_deal_characteristics_prompt() accepts governance_context parameter
+- Categories and taxonomy derived from governance documents when available
+- Falls back to sensible defaults when governance context is not available
 """
 
+from __future__ import annotations
 from typing import Dict, List, Any
 
 
-def discover_required_fields_prompt(teaser_text: str, deal_characteristics: Dict) -> str:
+def discover_required_fields_prompt(
+    teaser_text: str,
+    deal_characteristics: Dict,
+    governance_context: dict[str, Any] | None = None,
+) -> str:
     """
     Generate prompt for discovering required fields based on deal type.
-    
+
     Args:
         teaser_text: The deal teaser content
         deal_characteristics: Dict with transaction_type, structure, asset_class, etc.
-    
+        governance_context: Optional governance context from discovery
+
     Returns:
         Prompt for LLM to discover required fields
     """
-    
+
     chars = deal_characteristics
-    
+
+    # Build categories from governance context or defaults (M10)
+    if governance_context and governance_context.get("requirement_categories"):
+        cats = governance_context["requirement_categories"]
+        core_cats = cats[:3] if len(cats) >= 3 else cats
+        conditional_cats = cats[3:] if len(cats) > 3 else []
+
+        core_section = "### Core Categories (always include):\n"
+        for i, cat in enumerate(core_cats, start=1):
+            core_section += f"{i}. **{cat.upper()}** - {cat} details\n"
+
+        if conditional_cats:
+            cond_section = "\n### Conditional Categories (include if applicable):\n"
+            for i, cat in enumerate(conditional_cats, start=len(core_cats) + 1):
+                cond_section += f"{i}. **{cat.upper()}** - If relevant to this deal\n"
+        else:
+            cond_section = ""
+    else:
+        core_section = (
+            "### Core Categories (always include):\n"
+            "1. **DEAL INFORMATION** - Basic transaction details\n"
+            "2. **BORROWER** - Entity information\n"
+            "3. **FINANCIALS** - Key metrics\n"
+        )
+        cond_section = (
+            "\n### Conditional Categories (include if applicable):\n"
+            "4. **SPONSOR** - If sponsor-backed transaction\n"
+            "5. **GUARANTOR** - If guarantees mentioned\n"
+            "6. **ASSET** - If asset/collateral-based\n"
+            "7. **SECURITY** - If secured transaction\n"
+            "8. **CONSTRUCTION** - If construction/development deal\n"
+            "9. **ACQUISITION** - If acquisition financing\n"
+            "10. **REFINANCING** - If refinancing transaction\n"
+        )
+
     prompt = f"""Analyze this deal and determine which information fields need to be extracted.
 
 ## DEAL CHARACTERISTICS
@@ -38,21 +81,9 @@ def discover_required_fields_prompt(teaser_text: str, deal_characteristics: Dict
 
 ## YOUR TASK
 
-Based on this deal type and the Procedure requirements, list ALL information fields that need to be extracted.
+Based on this deal type and the governance requirements, list ALL information fields that need to be extracted.
 
-### Core Categories (always include):
-1. **DEAL INFORMATION** - Basic transaction details
-2. **BORROWER** - Entity information
-3. **FINANCIALS** - Key metrics
-
-### Conditional Categories (include if applicable):
-4. **SPONSOR** - If sponsor-backed transaction
-5. **GUARANTOR** - If guarantees mentioned
-6. **ASSET** - If asset/collateral-based
-7. **SECURITY** - If secured transaction
-8. **CONSTRUCTION** - If construction/development deal
-9. **ACQUISITION** - If acquisition financing
-10. **REFINANCING** - If refinancing transaction
+{core_section}{cond_section}
 
 ## OUTPUT FORMAT
 
@@ -70,27 +101,6 @@ Return a JSON array of field groups:
         "data_type": "currency",
         "typical_source": "teaser",
         "priority": "CRITICAL"
-      }},
-      {{
-        "name": "Facility Tenor",
-        "description": "Loan maturity period",
-        "why_required": "Required for risk assessment",
-        "data_type": "duration",
-        "typical_source": "teaser",
-        "priority": "CRITICAL"
-      }}
-    ]
-  }},
-  {{
-    "category": "SECURITY",
-    "fields": [
-      {{
-        "name": "Security Type",
-        "description": "Type of security (mortgage, pledge, etc.)",
-        "why_required": "Required for secured transaction compliance",
-        "data_type": "text",
-        "typical_source": "teaser",
-        "priority": "CRITICAL"
       }}
     ]
   }}
@@ -99,23 +109,53 @@ Return a JSON array of field groups:
 
 **Rules:**
 1. Only include categories that apply to THIS deal
-2. For each field, specify WHY it's required (cite Procedure if possible)
+2. For each field, specify WHY it's required (cite governance documents if possible)
 3. Mark priority: CRITICAL, IMPORTANT, or SUPPORTING
-4. If deal is unsecured, do NOT include SECURITY category
-5. If no construction, do NOT include CONSTRUCTION category
-6. If no guarantor mentioned, do NOT include GUARANTOR category
+4. Only include conditional categories if the deal characteristics warrant them
 
 Return ONLY the JSON array.
 """
-    
+
     return prompt
 
 
-def analyze_deal_characteristics_prompt(teaser_text: str) -> str:
+def analyze_deal_characteristics_prompt(
+    teaser_text: str,
+    governance_context: dict[str, Any] | None = None,
+) -> str:
     """
     Generate prompt to analyze deal characteristics before field discovery.
+
+    Args:
+        teaser_text: The deal teaser content
+        governance_context: Optional governance context from discovery
     """
-    
+
+    # Build taxonomy from governance context or defaults (M11)
+    if governance_context and governance_context.get("deal_taxonomy"):
+        taxonomy = governance_context["deal_taxonomy"]
+        taxonomy_lines = []
+        for dim, values in taxonomy.items():
+            dim_label = dim.replace("_", " ").title()
+            if isinstance(values, list) and values:
+                val_str = " | ".join(str(v) for v in values)
+                taxonomy_lines.append(f'  "{dim}": "{val_str}"')
+            else:
+                taxonomy_lines.append(f'  "{dim}": "<as identified>"')
+        taxonomy_json = ",\n".join(taxonomy_lines)
+    else:
+        taxonomy_json = (
+            '  "transaction_type": "new | modification | renewal | refinancing | acquisition",\n'
+            '  "structure": "secured | unsecured | mezzanine | hybrid",\n'
+            '  "asset_class": "as identified from teaser",\n'
+            '  "asset_subtype": "as identified from teaser or N/A",\n'
+            '  "special_features": ["as identified from teaser"],\n'
+            '  "parties": ["as identified from teaser"],\n'
+            '  "jurisdiction": "as identified from teaser",\n'
+            '  "regulatory_context": "as identified from teaser",\n'
+            '  "complexity_indicators": ["as identified from teaser"]'
+        )
+
     prompt = f"""Analyze this teaser and identify the key characteristics of this deal.
 
 ## TEASER
@@ -130,15 +170,7 @@ Identify the following characteristics:
 
 ```json
 {{
-  "transaction_type": "new | modification | renewal | refinancing | acquisition",
-  "structure": "secured | unsecured | mezzanine | hybrid",
-  "asset_class": "real_estate | corporate | project_finance | trade_finance | other",
-  "asset_subtype": "office | retail | residential | industrial | hotel | mixed | N/A",
-  "special_features": ["construction", "development", "sale_leaseback", "acquisition"],
-  "parties": ["borrower", "sponsor", "guarantor", "servicer"],
-  "jurisdiction": "Netherlands | Germany | UK | etc.",
-  "regulatory_context": "standard | real_estate_specific | project_finance_specific",
-  "complexity_indicators": ["multi_asset", "multi_jurisdiction", "subordinated", "complex_structure"]
+{taxonomy_json}
 }}
 ```
 
@@ -146,28 +178,28 @@ Analyze carefully and only include elements that are explicitly mentioned or cle
 
 Return ONLY the JSON object.
 """
-    
+
     return prompt
 
 
 def create_extraction_schema_from_fields(field_groups: List[Dict]) -> List[Dict]:
     """
     Convert discovered fields into extraction schema format.
-    
+
     Args:
         field_groups: List of category/fields dicts from LLM
-    
+
     Returns:
         Flat list of fields with metadata for extraction
     """
-    
+
     extraction_schema = []
     field_id = 1
-    
+
     for group in field_groups:
         category = group.get("category", "UNKNOWN")
         fields = group.get("fields", [])
-        
+
         for field in fields:
             extraction_schema.append({
                 "id": field_id,
@@ -184,22 +216,22 @@ def create_extraction_schema_from_fields(field_groups: List[Dict]) -> List[Dict]
                 "status": "pending"
             })
             field_id += 1
-    
+
     return extraction_schema
 
 
 def generate_dynamic_extraction_prompt(schema: List[Dict], teaser_text: str) -> str:
     """
     Generate extraction prompt using discovered schema.
-    
+
     Args:
         schema: Extraction schema from create_extraction_schema_from_fields
         teaser_text: Teaser to extract from
-    
+
     Returns:
         Prompt for extraction with discovered fields
     """
-    
+
     # Group by category
     categories = {}
     for field in schema:
@@ -207,7 +239,7 @@ def generate_dynamic_extraction_prompt(schema: List[Dict], teaser_text: str) -> 
         if cat not in categories:
             categories[cat] = []
         categories[cat].append(field)
-    
+
     # Build field descriptions
     field_descriptions = ""
     for category, fields in categories.items():
@@ -215,7 +247,7 @@ def generate_dynamic_extraction_prompt(schema: List[Dict], teaser_text: str) -> 
         for f in fields:
             priority_marker = "🔴" if f["priority"] == "CRITICAL" else ("🟡" if f["priority"] == "IMPORTANT" else "🟢")
             field_descriptions += f"- {priority_marker} **{f['name']}**: {f['description']}\n"
-    
+
     prompt = f"""Extract ALL available data from this teaser using the customized field schema.
 
 ## TEASER DOCUMENT
@@ -244,18 +276,11 @@ Return a JSON array with all fields:
     "value": "EUR 75,000,000",
     "source_quote": "The facility amount is EUR 75 million...",
     "confidence": "HIGH"
-  }},
-  {{
-    "id": 2,
-    "name": "Facility Tenor",
-    "value": "NOT STATED IN TEASER",
-    "source_quote": "",
-    "confidence": "N/A"
   }}
 ]
 ```
 
 Return ONLY the JSON array. Include ALL {len(schema)} fields in your response.
 """
-    
+
     return prompt

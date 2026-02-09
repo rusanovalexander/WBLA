@@ -59,6 +59,7 @@ from core.parsers import (
     format_requirements_for_context,
     safe_extract_json,
 )
+from core.governance_discovery import run_governance_discovery, get_terminology_synonyms
 from core.export import generate_docx, generate_audit_trail
 from ui.components.sidebar import render_sidebar
 from ui.components.agent_dashboard import render_agent_dashboard
@@ -108,6 +109,8 @@ def init_state():
         "phase_manager": None,
         "orch_chat_history": [], "orch_chat_active": False,
         "tracer": None,
+        "governance_context": None,
+        "governance_discovery_done": False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -206,6 +209,29 @@ def render_phase_setup():
 
     if st.session_state.rag_ok:
         st.success("✅ RAG connected to Vertex AI Search")
+        # Run governance discovery once to learn the institution's framework
+        if not st.session_state.governance_discovery_done:
+            with st.spinner("🔍 Analyzing governance documents (Procedure & Guidelines)..."):
+                gov_ctx = run_governance_discovery(
+                    search_procedure_fn=tool_search_procedure,
+                    search_guidelines_fn=tool_search_guidelines,
+                    tracer=get_tracer(),
+                )
+                st.session_state.governance_context = gov_ctx
+                st.session_state.governance_discovery_done = True
+        # Show discovery results
+        gov_ctx = st.session_state.governance_context
+        if gov_ctx and gov_ctx.get("discovery_status") == "complete":
+            st.success(
+                f"📚 Governance framework discovered: "
+                f"{len(gov_ctx.get('requirement_categories', []))} categories, "
+                f"{len(gov_ctx.get('compliance_framework', []))} compliance criteria, "
+                f"{len(gov_ctx.get('risk_taxonomy', []))} risk categories"
+            )
+        elif gov_ctx and gov_ctx.get("discovery_status") == "partial":
+            st.info("📚 Governance framework partially discovered — some prompts will use defaults")
+        elif gov_ctx:
+            st.warning("📚 Could not discover governance framework — using default prompts")
     else:
         st.warning("⚠️ RAG not connected — agents will not be able to search Procedure/Guidelines")
 
@@ -270,6 +296,7 @@ def render_phase_analysis():
                     teaser_text=st.session_state.teaser_text,
                     search_procedure_fn=tool_search_procedure,
                     tracer=get_tracer(),
+                    governance_context=st.session_state.get("governance_context"),
                 )
 
                 st.session_state.extracted_data = result["full_analysis"]
@@ -296,6 +323,7 @@ def render_phase_analysis():
                     {"Analysis": result["full_analysis"][:3000]},
                     {"Teaser": st.session_state.teaser_text[:1500]},
                     get_tracer(),
+                    governance_context=st.session_state.get("governance_context"),
                 )
                 st.session_state.orchestrator_insights = insights.full_text
                 st.session_state.orchestrator_flags = [f.model_dump() for f in insights.flags]
@@ -451,6 +479,8 @@ def render_phase_process_gaps():
                 assessment_approach=st.session_state.process_path,
                 origination_method=st.session_state.origination_method,
                 tracer=tracer,
+                search_procedure_fn=tool_search_procedure,
+                governance_context=st.session_state.get("governance_context"),
             )
 
             if reqs:
@@ -746,13 +776,8 @@ def _auto_fill_requirements():
 
 1. **SEMANTIC MATCHING:** Requirement names may differ from source terminology.
    Examples of equivalent terms:
-   - "Sponsor Experience" = "Track Record" = "Years of Activity" = "Operating History"
-   - "Property Address" = "Location" = "Asset Address" = "Site"  
-   - "Net Operating Income" = "NOI" = "Operating Income" = "Net Income"
-   - "Loan to Value" = "LTV" = "Leverage" = "LTV Ratio"
-   - "Debt Service Coverage" = "DSCR" = "Coverage Ratio" = "DSC"
-   - "Interest Coverage" = "ICR" = "Interest Coverage Ratio"
-   
+{get_terminology_synonyms(st.session_state.get("governance_context"))}
+
    **Search for CONCEPTS, not exact words.** Be flexible in matching terminology.
 
 2. **SEARCH THOROUGHLY:**
@@ -762,7 +787,7 @@ def _auto_fill_requirements():
    - Information might be embedded in paragraphs, not explicit fields
 
 3. **EXTRACT COMPLETELY:**
-   - For tables (rent rolls, budgets, covenants), include ALL rows
+   - For tables and multi-part values, include ALL rows and components
    - For multi-paragraph descriptions, include everything relevant
    - Don't truncate or summarize complex values
    - Format tables as markdown if needed
@@ -793,7 +818,7 @@ Simple value:
 
 Multi-line value:
 <json_output>
-[{{"id": 8, "value": "Building A: 8,000 sqm, 95% occupied\\nBuilding B: 5,000 sqm, 100% occupied", "source_quote": "portfolio comprises Building A (8,000 sqm, 95% let)..."}}]
+[{{"id": 8, "value": "Item A: detail one\\nItem B: detail two\\nTotal: combined detail", "source_quote": "the portfolio comprises Item A (detail one)..."}}]
 </json_output>
 
 Not found:
@@ -929,12 +954,8 @@ def _ai_suggest_requirement(req: dict, tracer) -> dict | None:
 
 1. **SEMANTIC MATCHING:** The requirement name may use different terminology than the source documents.
    Examples of equivalent terms:
-   - "Sponsor Experience" = "Track Record" = "Years of Activity" = "Operating History"
-   - "Property Address" = "Location" = "Asset Address" = "Site"
-   - "Net Operating Income" = "NOI" = "Net Income" = "Operating Income"
-   - "Loan to Value" = "LTV" = "LTV Ratio" = "Leverage"
-   - "Debt Service Coverage" = "DSCR" = "Coverage Ratio"
-   
+{get_terminology_synonyms(st.session_state.get("governance_context"))}
+
    **Search for the CONCEPT, not just the exact words.** Be flexible in matching.
 
 2. **SEARCH THOROUGHLY:** 
@@ -944,7 +965,7 @@ def _ai_suggest_requirement(req: dict, tracer) -> dict | None:
    - For multi-part requirements, search for each component
 
 3. **EXTRACT COMPLETELY:**
-   - If the value is a table (rent roll, budget, covenant package), include ALL rows
+   - If the value is a table or multi-part data, include ALL rows and components
    - If the value is a multi-paragraph description, include it all
    - If the value is a calculation, show the math
    - If the value spans multiple sentences or paragraphs, include the full context
@@ -978,8 +999,8 @@ Examples:
 Example 1 (Simple value):
 <json_output>
 {{
-  "value": "EUR 50 million",
-  "source_quote": "The senior facility of EUR 50 million secured by...",
+  "value": "50,000,000",
+  "source_quote": "The senior facility of 50 million...",
   "confidence": "HIGH",
   "found_in": "teaser"
 }}
@@ -988,8 +1009,8 @@ Example 1 (Simple value):
 Example 2 (Complex multi-line value):
 <json_output>
 {{
-  "value": "Tenant A: 5,000 sqm, EUR 200/sqm, expires 2028\\nTenant B: 3,000 sqm, EUR 180/sqm, expires 2027\\nTotal: 8,000 sqm",
-  "source_quote": "The building is let to three tenants...",
+  "value": "Item A: detail one, detail two\\nItem B: detail three, detail four\\nTotal: combined summary",
+  "source_quote": "The portfolio comprises Item A (detail one)...",
   "confidence": "HIGH",
   "found_in": "teaser"
 }}
@@ -998,8 +1019,8 @@ Example 2 (Complex multi-line value):
 Example 3 (Semantic match):
 <json_output>
 {{
-  "value": "15 years (track record in commercial real estate)",
-  "source_quote": "ABC Capital Partners has a 15-year track record in the market",
+  "value": "15 years of relevant experience",
+  "source_quote": "The company has a 15-year track record in the sector",
   "confidence": "HIGH",
   "found_in": "analysis"
 }}
@@ -1111,20 +1132,29 @@ include it even if the wording is different.
 def _generate_alternative_terms(requirement_name: str) -> list[str]:
     """
     Generate alternative search terms for a requirement.
-    
-    Uses common banking/lending terminology synonyms to improve matching.
+
+    Uses governance-discovered terminology when available,
+    plus common banking/lending terminology synonyms to improve matching.
     """
-    
-    # Common synonyms for banking/lending terms
+
+    # Start with governance-discovered terminology if available
+    gov_ctx = st.session_state.get("governance_context")
+    gov_terms = {}
+    if gov_ctx and gov_ctx.get("terminology_map"):
+        for term, synonyms in gov_ctx["terminology_map"].items():
+            if isinstance(synonyms, list):
+                gov_terms[term.lower()] = synonyms
+
+    # Common synonyms for banking/lending terms (defaults)
     term_map = {
         # Sponsor-related
         "experience": ["track record", "history", "years of activity", "background", "years active"],
         "sponsor": ["backer", "equity provider", "promoter", "investor", "fund manager"],
-        
+
         # Location-related
         "address": ["location", "site", "property address", "asset location", "situated at"],
         "location": ["address", "site", "situated", "geography", "where"],
-        
+
         # Financial metrics
         "noi": ["net operating income", "operating income", "net income from operations"],
         "ltv": ["loan to value", "leverage", "ltv ratio", "loan-to-value"],
@@ -1132,7 +1162,7 @@ def _generate_alternative_terms(requirement_name: str) -> list[str]:
         "icr": ["interest coverage", "interest coverage ratio", "ebitda to interest"],
         "debt service": ["principal and interest", "p&i", "loan payments", "debt payments"],
         "yield": ["return", "debt yield", "yield on cost", "income yield"],
-        
+
         # Property-related
         "occupancy": ["occupancy rate", "let", "leased", "tenancy", "vacancy", "let rate"],
         "vacancy": ["void", "unlet", "vacant space", "empty units"],
@@ -1140,12 +1170,12 @@ def _generate_alternative_terms(requirement_name: str) -> list[str]:
         "nla": ["net lettable area", "net leasable area", "rentable area", "usable area"],
         "sqm": ["square meters", "square metres", "m2", "area"],
         "rent": ["rental income", "passing rent", "rent roll", "rental", "lease rate"],
-        
+
         # Tenant-related
         "tenant": ["occupier", "lessee", "renter", "occupant"],
         "lease": ["tenancy agreement", "lease agreement", "rental contract", "tenancy"],
         "wault": ["weighted average unexpired lease term", "average lease term", "lease expiry"],
-        
+
         # Transaction-related
         "covenant": ["financial covenant", "undertaking", "agreement", "maintenance covenant"],
         "security": ["collateral", "pledge", "mortgage", "charge", "guarantee"],
@@ -1153,11 +1183,22 @@ def _generate_alternative_terms(requirement_name: str) -> list[str]:
         "purpose": ["use of proceeds", "rationale", "reason", "objective"],
         "tenor": ["term", "maturity", "duration", "loan term"],
         "pricing": ["margin", "spread", "interest rate", "rate", "cost"],
-        
+
         # Party-related
         "borrower": ["obligor", "debtor", "company", "entity", "spv"],
         "guarantor": ["sponsor", "parent company", "guarantee provider"],
     }
+
+    # Merge governance terms into term_map (governance takes priority)
+    for key, synonyms in gov_terms.items():
+        if key in term_map:
+            # Extend existing entry with governance synonyms
+            existing = set(s.lower() for s in term_map[key])
+            for s in synonyms:
+                if s.lower() not in existing:
+                    term_map[key].append(s)
+        else:
+            term_map[key] = synonyms
     
     alternatives = []
     name_lower = requirement_name.lower()
@@ -1405,6 +1446,7 @@ def render_phase_compliance():
                     extracted_data=st.session_state.extracted_data,
                     search_guidelines_fn=tool_search_guidelines,
                     tracer=get_tracer(),
+                    governance_context=st.session_state.get("governance_context"),
                 )
                 st.session_state.compliance_result = result_text
                 st.session_state.compliance_checks = checks
@@ -1414,6 +1456,7 @@ def render_phase_compliance():
                     {"Compliance": result_text[:3000]},
                     {"Process Path": st.session_state.process_path},
                     get_tracer(),
+                    governance_context=st.session_state.get("governance_context"),
                 )
                 st.session_state.orchestrator_insights = insights.full_text
                 st.session_state.orchestrator_flags = [f.model_dump() for f in insights.flags]
@@ -1534,6 +1577,8 @@ def render_phase_drafting():
                     origination_method=st.session_state.origination_method,
                     analysis_text=st.session_state.extracted_data,
                     tracer=get_tracer(),
+                    search_procedure_fn=tool_search_procedure,
+                    governance_context=st.session_state.get("governance_context"),
                 )
 
                 if sections:
@@ -1582,6 +1627,7 @@ def render_phase_drafting():
                             section, context,
                             agent_bus=st.session_state.agent_bus,
                             tracer=get_tracer(),
+                            governance_context=st.session_state.get("governance_context"),
                         )
                         drafts[name] = draft_result.content
                 st.rerun()
@@ -1614,6 +1660,7 @@ def render_phase_drafting():
                                 section, context,
                                 agent_bus=st.session_state.agent_bus,
                                 tracer=get_tracer(),
+                                governance_context=st.session_state.get("governance_context"),
                             )
                             drafts[name] = draft_result.content
                             st.rerun()

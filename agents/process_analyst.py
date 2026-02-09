@@ -1,14 +1,81 @@
 """
-Process Analyst Agent - FIXED VERSION (No Hardcoded Template)
+Process Analyst Agent - DOCUMENT-DRIVEN VERSION
 
-Key Fix: Natural language extraction instead of rigid table template.
-This allows dynamic requirement discovery to work properly.
+Key changes:
+- Instruction is now a function: get_process_analyst_instruction(governance_context)
+- Search vocabulary, extraction sections, and risk taxonomy are parameterized
+- Falls back to sensible defaults when governance context is not available
 """
+
+from __future__ import annotations
+from typing import Any
 
 from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block
 
 
-PROCESS_ANALYST_INSTRUCTION = f"""
+def _build_search_vocabulary(governance_context: dict[str, Any] | None) -> str:
+    """Build search vocabulary hints from governance context or defaults."""
+    if governance_context and governance_context.get("search_vocabulary"):
+        vocab = governance_context["search_vocabulary"]
+        return "\n".join(f"- {term}" for term in vocab[:8])
+    return (
+        "- Assessment approach decision criteria and thresholds\n"
+        "- Available assessment approaches and when each applies\n"
+        "- Credit origination methods and their requirements\n"
+        "- Decision trees and threshold criteria\n"
+        "- Special rules for specific deal types"
+    )
+
+
+def _build_extraction_sections(governance_context: dict[str, Any] | None) -> str:
+    """Build extraction section suggestions from governance context or defaults."""
+    if governance_context and governance_context.get("requirement_categories"):
+        cats = governance_context["requirement_categories"]
+        return "\n".join(f"- {cat}" for cat in cats)
+    return (
+        "- Deal Structure\n"
+        "- Borrower and Structure\n"
+        "- Sponsor Information (if applicable)\n"
+        "- Asset Characteristics\n"
+        "- Financial Metrics\n"
+        "- Security Package\n"
+        "- Transaction Context\n"
+        "- Identified Gaps"
+    )
+
+
+def _build_risk_taxonomy(governance_context: dict[str, Any] | None) -> str:
+    """Build risk assessment template from governance context or defaults."""
+    if governance_context and governance_context.get("risk_taxonomy"):
+        cats = governance_context["risk_taxonomy"]
+    else:
+        cats = ["Credit Risk", "Market Risk", "Operational Risk", "Structural Risk"]
+    lines = []
+    for cat in cats:
+        lines.append(f"**{cat}:**")
+        lines.append(f"- [Key {cat.lower()} factors]")
+        lines.append(f"- [Initial assessment]\n")
+    return "\n".join(lines)
+
+
+def _build_asset_class_hints(governance_context: dict[str, Any] | None) -> str:
+    """Build asset class extraction hints from governance context or defaults."""
+    if governance_context and governance_context.get("deal_taxonomy"):
+        taxonomy = governance_context["deal_taxonomy"]
+        subtypes = taxonomy.get("asset_subtype") or taxonomy.get("asset_class", [])
+        if subtypes:
+            return (
+                "   Adapt your extraction focus to the deal's asset class as identified.\n"
+                "   Search the Procedure for data requirements specific to the identified asset type.\n"
+                "   Known asset types from Procedure: " + ", ".join(str(s) for s in subtypes)
+            )
+    return (
+        "   Adapt your extraction focus to the deal's asset class.\n"
+        "   Search the Procedure for data requirements specific to the identified asset type."
+    )
+
+
+_PROCESS_ANALYST_TEMPLATE = """
 You are the **Process Analyst Agent** for a credit pack drafting system.
 
 <ROLE>
@@ -32,11 +99,7 @@ of this document in advance — you MUST search it to find relevant sections.
 4. Search for origination methods (what type of document to produce)
 
 **Typical areas to search for (adapt based on what you find):**
-- Assessment approach decision criteria (deal size thresholds, complexity indicators)
-- Available assessment approaches and when each applies
-- Credit origination methods and their requirements
-- Proportionality thresholds and decision trees
-- Special rules for specific deal types
+{search_vocabulary}
 
 DO NOT assume you know the section numbers or decision thresholds. SEARCH to find them.
 </PROCEDURE_KNOWLEDGE>
@@ -75,12 +138,7 @@ Organize information naturally based on what the teaser actually contains.
 **Extraction Principles:**
 
 1. **Adapt to the Deal Type:**
-   - Office/Retail → focus on rent roll, tenants, vacancy, location quality
-   - Hotel → focus on ADR, RevPAR, occupancy, F&B, operator/brand
-   - Residential → focus on unit count, unit mix, rental levels, void rate
-   - Industrial → focus on warehouse specs, logistics access, tenant profile
-   - Construction → focus on budget, GDV, contractor, completion date, planning
-   - Portfolio → focus on composition, geographic spread, asset breakdown
+{asset_class_hints}
 
 2. **Natural Language Format:**
    Write each category as a paragraph or section of natural text, not a rigid table.
@@ -236,7 +294,7 @@ Search the Procedure for the specific steps required for the assessment approach
 IMPORTANT: Do not use a pre-assumed list of options. SEARCH the Procedure to find what the options actually are, then pick the one that matches.
 </PROCESS_PATH_TASK>
 
-{get_verbose_block()}
+{verbose_block}
 
 <OUTPUT_STRUCTURE>
 Structure your response with these sections:
@@ -275,15 +333,9 @@ Document your complete analytical thinking:
 
 [Write your natural language extraction here following the examples above]
 
-Organize by logical sections based on what the teaser contains:
-- Deal Structure
-- Borrower and Structure
-- Sponsor Information (if applicable)
-- Asset Characteristics
-- Financial Metrics
-- Security Package
-- Transaction Context
-- Identified Gaps
+Organize by logical sections based on what the teaser contains.
+Suggested categories (from governance documents):
+{extraction_sections}
 
 Include confidence levels and source quotes throughout.
 
@@ -347,22 +399,7 @@ Based on the determined process path, ALL required steps:
 
 ### 6. ⚠️ PRELIMINARY RISK ASSESSMENT
 
-**Credit Risk:**
-- [Key credit risk factors]
-- [Initial assessment]
-
-**Market Risk:**
-- [Market-related risks]
-- [Initial assessment]
-
-**Operational Risk:**
-- [Operational concerns]
-- [Initial assessment]
-
-**Structural Risk:**
-- [Structure-related risks]
-- [Initial assessment]
-
+{risk_taxonomy}
 *Note: This is preliminary - detailed assessment follows in compliance check.*
 
 ---
@@ -395,6 +432,21 @@ You have access to:
 - tool_load_document: Load any document if needed
 </TOOLS>
 """
+
+
+def get_process_analyst_instruction(governance_context: dict[str, Any] | None = None) -> str:
+    """Build Process Analyst instruction with governance-derived parameters."""
+    return _PROCESS_ANALYST_TEMPLATE.format(
+        search_vocabulary=_build_search_vocabulary(governance_context),
+        asset_class_hints=_build_asset_class_hints(governance_context),
+        extraction_sections=_build_extraction_sections(governance_context),
+        risk_taxonomy=_build_risk_taxonomy(governance_context),
+        verbose_block=get_verbose_block(),
+    )
+
+
+# Backward-compatible constant (uses defaults when no governance context)
+PROCESS_ANALYST_INSTRUCTION = get_process_analyst_instruction(None)
 
 
 # Create agent config dict

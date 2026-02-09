@@ -1,11 +1,10 @@
 """
-Native Gemini Function Declarations for Credit Pack PoC v3.2.
+Native Gemini Function Declarations for Credit Pack PoC v3.2 — DOCUMENT-DRIVEN VERSION
 
-Replaces the text-based <TOOL>search_procedure: "query"</TOOL> pattern
-with proper Gemini function calling schemas.
-
-Agents can now use native tool calling — the model returns structured
-function_call objects instead of text that needs regex parsing.
+Key changes:
+- get_tool_declarations() accepts governance_context parameter (M14)
+- Search query examples derived from governance documents when available
+- Falls back to generic examples when governance context is not available
 """
 
 from __future__ import annotations
@@ -13,9 +12,12 @@ from __future__ import annotations
 from typing import Any
 
 
-def get_tool_declarations() -> dict[str, Any]:
+def get_tool_declarations(governance_context: dict[str, Any] | None = None) -> dict[str, Any]:
     """
     Get Gemini-native tool declarations.
+
+    Args:
+        governance_context: Optional governance context from discovery
 
     Returns dict mapping tool names to their function declarations.
     These are passed to the Gemini API via GenerateContentConfig.tools.
@@ -24,6 +26,15 @@ def get_tool_declarations() -> dict[str, Any]:
         from google.genai import types
     except ImportError:
         return {}
+
+    # Build search query examples from governance context or defaults (M14)
+    if governance_context and governance_context.get("search_vocabulary"):
+        vocab = governance_context["search_vocabulary"]
+        proc_examples = ", ".join(f"'{v}'" for v in vocab[:3]) if vocab else "'assessment approach thresholds'"
+        guide_examples = ", ".join(f"'{v}'" for v in vocab[3:6]) if len(vocab) > 3 else "'compliance criteria limits'"
+    else:
+        proc_examples = "'assessment approach thresholds', 'credit origination methods', 'assessment decision criteria'"
+        guide_examples = "'compliance criteria limits', 'financial ratio requirements', 'security package requirements'"
 
     return {
         "search_procedure": types.Tool(
@@ -42,8 +53,7 @@ def get_tool_declarations() -> dict[str, Any]:
                                 type="STRING",
                                 description=(
                                     "Search query — be specific about what rule or threshold you need. "
-                                    "Examples: 'proportionality approach thresholds', "
-                                    "'credit origination methods', 'assessment decision criteria'"
+                                    f"Examples: {proc_examples}"
                                 ),
                             ),
                             "num_results": types.Schema(
@@ -72,8 +82,7 @@ def get_tool_declarations() -> dict[str, Any]:
                                 type="STRING",
                                 description=(
                                     "Search query — be specific about what limit or rule you need. "
-                                    "Examples: 'LTV limit credit granting criteria', "
-                                    "'minimum DSCR requirement', 'security package requirements'"
+                                    f"Examples: {guide_examples}"
                                 ),
                             ),
                             "num_results": types.Schema(
@@ -161,17 +170,18 @@ def create_tool_executor(
     return executor
 
 
-def get_agent_tools(agent_name: str) -> list[Any]:
+def get_agent_tools(agent_name: str, governance_context: dict[str, Any] | None = None) -> list[Any]:
     """
     Get the appropriate tool declarations for a given agent.
 
     Args:
         agent_name: Name of the agent
+        governance_context: Optional governance context from discovery
 
     Returns:
         List of Tool objects for the agent
     """
-    declarations = get_tool_declarations()
+    declarations = get_tool_declarations(governance_context)
     if not declarations:
         return []
 

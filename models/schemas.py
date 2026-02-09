@@ -270,3 +270,28 @@ class FieldGroup(BaseModel):
     """A group of discovered fields under a category."""
     category: str
     fields: list[DiscoveredField] = Field(default_factory=list)
+
+
+# =============================================================================
+# Governance Discovery
+# =============================================================================
+
+class GovernanceContext(BaseModel):
+    """
+    Discovered governance context from Procedure & Guidelines documents.
+
+    Populated at startup via RAG queries. Used to parameterize all agent
+    prompts so the system adapts to ANY bank's governance framework
+    without code changes.
+    """
+    requirement_categories: list[str] = Field(default_factory=list)
+    compliance_framework: list[str] = Field(default_factory=list)
+    section_templates: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
+    risk_taxonomy: list[str] = Field(default_factory=list)
+    deal_taxonomy: dict[str, list[str]] = Field(default_factory=dict)
+    terminology_map: dict[str, list[str]] = Field(default_factory=dict)
+    search_vocabulary: list[str] = Field(default_factory=list)
+    raw_procedure_excerpts: dict[str, str] = Field(default_factory=dict)
+    raw_guidelines_excerpts: dict[str, str] = Field(default_factory=dict)
+    discovery_timestamp: str = ""
+    discovery_status: str = "pending"  # pending | complete | partial | failed

@@ -8,10 +8,10 @@ Multi-agent system:
 - WriterAgent: Drafts sections, can query other agents
 """
 
-from .orchestrator import orchestrator_config, ORCHESTRATOR_INSTRUCTION
-from .process_analyst import process_analyst_config, PROCESS_ANALYST_INSTRUCTION
-from .compliance_advisor import compliance_advisor_config, COMPLIANCE_ADVISOR_INSTRUCTION
-from .writer import writer_config, WRITER_INSTRUCTION
+from .orchestrator import orchestrator_config, ORCHESTRATOR_INSTRUCTION, get_orchestrator_instruction
+from .process_analyst import process_analyst_config, PROCESS_ANALYST_INSTRUCTION, get_process_analyst_instruction
+from .compliance_advisor import compliance_advisor_config, COMPLIANCE_ADVISOR_INSTRUCTION, get_compliance_advisor_instruction
+from .writer import writer_config, WRITER_INSTRUCTION, get_writer_instruction
 from .level3 import (
     AgentCommunicationBus,
     create_process_analyst_responder,
@@ -26,10 +26,10 @@ AGENT_CONFIGS = {
 }
 
 __all__ = [
-    "orchestrator_config", "ORCHESTRATOR_INSTRUCTION",
-    "process_analyst_config", "PROCESS_ANALYST_INSTRUCTION",
-    "compliance_advisor_config", "COMPLIANCE_ADVISOR_INSTRUCTION",
-    "writer_config", "WRITER_INSTRUCTION",
+    "orchestrator_config", "ORCHESTRATOR_INSTRUCTION", "get_orchestrator_instruction",
+    "process_analyst_config", "PROCESS_ANALYST_INSTRUCTION", "get_process_analyst_instruction",
+    "compliance_advisor_config", "COMPLIANCE_ADVISOR_INSTRUCTION", "get_compliance_advisor_instruction",
+    "writer_config", "WRITER_INSTRUCTION", "get_writer_instruction",
     "AGENT_CONFIGS",
     "AgentCommunicationBus",
     "create_process_analyst_responder",
