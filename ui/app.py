@@ -871,13 +871,17 @@ CRITICAL RULES:
 - NO preambles like "Here is the JSON:" or "Based on the teaser:"
 - NO explanations before or after the tags
 - If you can't find any requirements, return empty array: <json_output>[]</json_output>
+- Keep each "value" field CONCISE (max 200 chars). For complex data, include only the key figures.
+  BAD: "Sponsor: ABC Corp, global real estate arm of XYZ... (500 chars)"
+  GOOD: "ABC Corp (AUM: $46Bn, 35+ years experience, 220+ professionals)"
+- For tables with many rows, summarize rather than listing every row in the value
 
-NOW: Extract ALL requirements you can find from the documents above. 
+NOW: Extract ALL requirements you can find from the documents above.
 Use semantic matching to find values even if terminology differs.
 Output ONLY <json_output> tags with JSON array inside, NO other text.
 """
 
-    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.0, 4000, "AutoFill", tracer, max_retries=5)
+    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.0, 8000, "AutoFill", tracer, max_retries=5)
 
     tracer.record("AutoFill", "RAW_RESPONSE", f"LLM returned {len(result.text)} chars")
 
@@ -1076,14 +1080,16 @@ Example 4 (Not found):
 }}
 </json_output>
 
+IMPORTANT: Keep the "value" field concise (max 300 chars). Summarize key figures rather than copying entire paragraphs.
+
 NOW: Extract the requirement "{req['name']}" from the documents above.
 Remember: Use SEMANTIC MATCHING - look for the concept, not just exact word matches.
 Output ONLY the JSON between <json_output></json_output> tags with NO other text before or after.
 """
-    
+
     # Increased token budget to handle complex multi-line values (sponsor profiles, rent rolls, etc.)
     # Use backoff retry to handle rate limits gracefully
-    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.0, 4000, "AISuggest", tracer)
+    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.0, 6000, "AISuggest", tracer)
     
     # Use improved parser with XML tag support
     parsed = safe_extract_json(result.text, "object")
