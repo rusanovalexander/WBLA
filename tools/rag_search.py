@@ -200,45 +200,70 @@ def search_rag(query: str, num_results: int = 5) -> Dict[str, Any]:
                         doc_type = dtype
                         break
             
-            # Collect content
+            # Collect content and page numbers
             content_parts = []
-            
-            # Extractive answers
+            page_numbers = set()  # Collect unique page numbers
+
+            # Extractive answers (with page numbers)
             if "extractive_answers" in data:
                 for ans in data["extractive_answers"]:
+                    ans_dict = _convert_proto_to_dict(ans) if not isinstance(ans, dict) else ans
                     text = _extract_text_from_field(ans)
                     if text and len(text) > 10:
                         content_parts.append(text)
-            
-            # Extractive segments
+                    # Extract page number if available
+                    if isinstance(ans_dict, dict) and "pageNumber" in ans_dict:
+                        page_numbers.add(str(ans_dict["pageNumber"]))
+
+            # Extractive segments (with page numbers)
             if "extractive_segments" in data:
                 for seg in data["extractive_segments"]:
+                    seg_dict = _convert_proto_to_dict(seg) if not isinstance(seg, dict) else seg
                     text = _extract_text_from_field(seg)
                     if text and len(text) > 10:
                         content_parts.append(text)
-            
-            # Snippets
+                    # Extract page number if available
+                    if isinstance(seg_dict, dict) and "pageNumber" in seg_dict:
+                        page_numbers.add(str(seg_dict["pageNumber"]))
+
+            # Snippets (usually don't have page numbers, but check anyway)
             if "snippets" in data:
                 for snip in data["snippets"]:
+                    snip_dict = _convert_proto_to_dict(snip) if not isinstance(snip, dict) else snip
                     text = _extract_text_from_field(snip)
                     if text and len(text) > 10:
                         content_parts.append(text)
-            
+                    # Extract page number if available
+                    if isinstance(snip_dict, dict) and "pageNumber" in snip_dict:
+                        page_numbers.add(str(snip_dict["pageNumber"]))
+
             # Deduplicate
             unique_parts = []
             for part in content_parts:
                 is_dup = any(part in existing or existing in part for existing in unique_parts)
                 if not is_dup:
                     unique_parts.append(part)
-            
+
             content = "\n\n".join(unique_parts[:5])
-            
+
+            # Build page reference string
+            page_ref = ""
+            if page_numbers:
+                sorted_pages = sorted(page_numbers, key=lambda x: int(x) if x.isdigit() else 999)
+                if len(sorted_pages) == 1:
+                    page_ref = f"p.{sorted_pages[0]}"
+                elif len(sorted_pages) <= 3:
+                    page_ref = f"pp.{', '.join(sorted_pages)}"
+                else:
+                    page_ref = f"pp.{sorted_pages[0]}-{sorted_pages[-1]}"
+
             results.append({
                 "id": doc.id,
                 "uri": uri,
                 "doc_type": doc_type,
                 "title": title,
-                "content": content[:4000]
+                "content": content[:4000],
+                "page_reference": page_ref  # NEW: page reference for citations
             })
         
         return {

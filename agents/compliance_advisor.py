@@ -63,7 +63,10 @@ For EACH criterion you find, add a row:
 
 | Criterion | Guideline Limit | Deal Value | Status | Evidence | Reference |
 |-----------|-----------------|------------|--------|----------|-----------|
-| [criterion name] | [MUST/SHOULD] [limit from RAG] | [value from deal data] | ✅/⚠️/❌ | "[source quote]" | [Section ref from RAG] |
+| [criterion name] | [MUST/SHOULD] [limit from RAG] | [value from deal data] | ✅/⚠️/❌ | "[source quote]" | [Doc title, page_reference from RAG] |
+
+**IMPORTANT**: The Reference column MUST include the document title and page reference from your RAG search results.
+Each RAG result includes a "page_reference" field (e.g., "p.5" or "pp.3-7") — use this in your citations.
 
 Include ALL criteria found via RAG search — do not limit to a predefined list.
 """)
@@ -77,7 +80,10 @@ you discover in the Guidelines document. For EACH category you find:
 
 | Criterion | Guideline Limit | Deal Value | Status | Evidence | Reference |
 |-----------|-----------------|------------|--------|----------|-----------|
-| [criterion name] | [MUST/SHOULD] [limit from RAG] | [value from deal data] | ✅/⚠️/❌ | "[source quote]" | [Section ref from RAG] |
+| [criterion name] | [MUST/SHOULD] [limit from RAG] | [value from deal data] | ✅/⚠️/❌ | "[source quote]" | [Doc title, page_reference from RAG] |
+
+**IMPORTANT**: The Reference column MUST include the document title and page reference from your RAG search results.
+Each RAG result includes a "page_reference" field (e.g., "p.5" or "pp.3-7") — use this in your citations.
 
 - State the guideline criterion and its source section
 - State the deal's actual value or status
