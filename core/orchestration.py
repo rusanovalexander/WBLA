@@ -99,6 +99,14 @@ COMPLIANCE_EXTRACTION_PROMPT = """You are a JSON extraction assistant. Extract A
 ## TASK
 Extract every compliance criterion the agent checked into a JSON array.
 
+IMPORTANT: The analysis above may contain compliance checks in:
+- Markdown tables with columns like Criterion | Guideline Limit | Deal Value | Status
+- Bullet points with PASS/FAIL/REVIEW assessments
+- Numbered lists of criteria checks
+- Summary tables at the end
+
+Scan the ENTIRE text above and extract EVERY criterion that was assessed.
+
 CRITICAL FORMATTING RULES:
 - You MUST output ONLY valid JSON with NO text before or after
 - Do NOT include markdown code fences like ```json
@@ -109,21 +117,23 @@ CRITICAL FORMATTING RULES:
 [
   {{
     "criterion": "<name of the criterion>",
-    "guideline_limit": "<the limit from the Guidelines>",
-    "deal_value": "<the deal's actual value>",
+    "guideline_limit": "<the limit or requirement from the Guidelines>",
+    "deal_value": "<the deal's actual value for this criterion>",
     "status": "PASS",
-    "evidence": "<brief reasoning>",
-    "reference": "<Guidelines section>",
+    "evidence": "<brief reasoning or quote>",
+    "reference": "<Guidelines section reference if available>",
     "severity": "MUST"
   }}
 ]
 </json_output>
 
 EXTRACTION RULES:
-- Include EVERY criterion the agent assessed
+- Include EVERY criterion the agent assessed — look through the entire text
+- Map emoji statuses: ✅ = "PASS", ❌ = "FAIL", ⚠️ = "REVIEW", ℹ️ = "N/A"
 - status must be exactly one of: "PASS", "FAIL", "REVIEW", "N/A"
 - severity must be exactly one of: "MUST", "SHOULD"
-- If no compliance checks found, return empty array: []
+- If a criterion was assessed but status is unclear, use "REVIEW"
+- If no compliance checks found at all, return empty array: []
 
 NOW: Extract ALL compliance checks. Output ONLY the JSON array between <json_output></json_output> tags with NO other text.
 """
@@ -186,27 +196,37 @@ def _extract_compliance_checks(
 ) -> list[dict]:
     """
     Use a dedicated LLM call to extract compliance checks with retry.
+
+    Strategy:
+    1. Try LLM extraction on full text (up to 30k chars) — 3 attempts
+    2. If LLM extraction fails, fall back to regex-based table parsing
     """
     tracer.record("Extraction", "START", "Extracting compliance checks")
-    
+
+    # Use more of the compliance text — the checks are often near the end
+    text_for_extraction = compliance_text[:30000]
+    tracer.record("Extraction", "INPUT_SIZE", f"{len(compliance_text)} chars total, using {len(text_for_extraction)}")
+
     prompt = COMPLIANCE_EXTRACTION_PROMPT.format(
-        compliance_text=compliance_text[:12000]
+        compliance_text=text_for_extraction
     )
-    
-    # Try up to 2 times
-    for attempt in range(2):
-        temperature = 0.0 if attempt == 0 else 0.1
 
-        tracer.record("Extraction", "ATTEMPT", f"Attempt {attempt + 1}/2 (temp={temperature})")
+    # Try up to 3 times with varying temperature
+    last_output = ""
+    for attempt in range(3):
+        temperature = [0.0, 0.1, 0.2][attempt]
 
-        result = call_llm(prompt, MODEL_FLASH, temperature, 6000, "Extraction", tracer)
+        tracer.record("Extraction", "ATTEMPT", f"Attempt {attempt + 1}/3 (temp={temperature})")
+
+        result = call_llm(prompt, MODEL_FLASH, temperature, 10000, "Extraction", tracer)
         # AG-H3: Check LLM success before using output
         if not result.success:
             tracer.record("Extraction", "LLM_FAIL", result.error or "Unknown")
             continue
+        last_output = result.text
         parsed = safe_extract_json(result.text, "array")
 
-        if parsed is not None and isinstance(parsed, list):
+        if parsed is not None and isinstance(parsed, list) and len(parsed) > 0:
             # AG-H4: Validate each check through Pydantic
             validated_checks = []
             for check_data in parsed:
@@ -218,10 +238,82 @@ def _extract_compliance_checks(
             tracer.record("Extraction", "SUCCESS", f"Extracted {len(validated_checks)} checks")
             return validated_checks
 
-    # Both attempts failed
-    tracer.record("Extraction", "FAILED", "Could not extract checks after 2 attempts")
-    logger.error("Compliance extraction failed. Last output (first 1000 chars): %s", result.text[:1000])
+    # LLM extraction failed — try regex fallback on markdown tables
+    tracer.record("Extraction", "FALLBACK", "LLM extraction failed, trying regex table parse")
+    fallback_checks = _regex_extract_compliance_table(compliance_text, tracer)
+    if fallback_checks:
+        tracer.record("Extraction", "FALLBACK_SUCCESS", f"Regex extracted {len(fallback_checks)} checks")
+        return fallback_checks
+
+    # Everything failed
+    tracer.record("Extraction", "FAILED", "Could not extract checks after 3 LLM attempts + regex fallback")
+    logger.error("Compliance extraction failed. Last LLM output (first 1000 chars): %s", last_output[:1000])
     return []
+
+
+def _regex_extract_compliance_table(compliance_text: str, tracer: TraceStore) -> list[dict]:
+    """
+    Fallback: extract compliance checks from markdown tables in the agent's output.
+
+    The compliance agent outputs tables like:
+    | Criterion | Guideline Limit | Deal Value | Status | Evidence | Reference |
+    |-----------|-----------------|------------|--------|----------|-----------|
+    | Some criterion | MUST: some limit | some value | ✅/⚠️/❌ | reasoning | Section X |
+    """
+    checks = []
+
+    # Find all markdown table rows (skip header and separator rows)
+    # Match rows with at least 5 pipe-separated columns
+    row_pattern = re.compile(
+        r'^\s*\|(.+?)\|(.+?)\|(.+?)\|(.+?)\|(.+?)(?:\|(.+?))?(?:\|(.+?))?\|\s*$',
+        re.MULTILINE,
+    )
+
+    for match in row_pattern.finditer(compliance_text):
+        cols = [c.strip() for c in match.groups() if c is not None]
+
+        # Skip header rows and separator rows
+        if not cols or all(c.startswith('-') or c.startswith('=') for c in cols):
+            continue
+        if cols[0].lower() in ("criterion", "category", "check", "**total**", "total"):
+            continue
+        # Skip rows that are template placeholders
+        if "[criterion" in cols[0].lower() or "[category" in cols[0].lower():
+            continue
+
+        # Map emoji status to enum values
+        status_col = cols[3] if len(cols) > 3 else ""
+        if "✅" in status_col or "PASS" in status_col.upper():
+            status = "PASS"
+        elif "❌" in status_col or "FAIL" in status_col.upper():
+            status = "FAIL"
+        elif "ℹ" in status_col or "N/A" in status_col.upper():
+            status = "N/A"
+        else:
+            status = "REVIEW"
+
+        # Determine severity
+        limit_col = cols[1] if len(cols) > 1 else ""
+        severity = "MUST" if "MUST" in limit_col.upper() else "SHOULD"
+
+        check = {
+            "criterion": cols[0].strip("* "),
+            "guideline_limit": limit_col,
+            "deal_value": cols[2] if len(cols) > 2 else "",
+            "status": status,
+            "evidence": cols[4] if len(cols) > 4 else "",
+            "reference": cols[5] if len(cols) > 5 else "",
+            "severity": severity,
+        }
+
+        # Only add if criterion looks real (not empty or placeholder)
+        if check["criterion"] and len(check["criterion"]) > 2:
+            checks.append(check)
+
+    if checks:
+        tracer.record("Extraction", "REGEX_PARSE", f"Found {len(checks)} checks from markdown tables")
+
+    return checks
 
 
 # =============================================================================

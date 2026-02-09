@@ -1512,6 +1512,19 @@ def render_phase_compliance():
                     "🚫 **Compliance analysis was received but structured data couldn't be extracted.** "
                     "Please review the raw compliance report below before proceeding."
                 )
+                # Manual retry button
+                if st.button("🔄 Retry Compliance Extraction", use_container_width=True):
+                    with st.spinner("Re-extracting compliance checks..."):
+                        from core.orchestration import _extract_compliance_checks
+                        retry_checks = _extract_compliance_checks(
+                            st.session_state.compliance_result, get_tracer()
+                        )
+                        if retry_checks:
+                            st.session_state.compliance_checks = retry_checks
+                            st.success(f"✅ Successfully extracted {len(retry_checks)} compliance checks!")
+                            st.rerun()
+                        else:
+                            st.error("Extraction failed again. Please review the raw report below and proceed manually.")
 
         with st.expander("📋 Full Compliance Report", expanded=False):
             st.markdown(st.session_state.compliance_result)
