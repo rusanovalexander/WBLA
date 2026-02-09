@@ -65,7 +65,7 @@ VERSION = "3.2.0"
 # Product / Domain Configuration (avoids hardcoded domain assumptions)
 # =============================================================================
 
-PRODUCT_NAME = _get_secret("PRODUCT_NAME", "credit pack")  # Configurable output document name
+PRODUCT_NAME = _get_secret("PRODUCT_NAME", "CP")  # Configurable output document name
 PRODUCT_ROLE = _get_secret("PRODUCT_ROLE", "Senior Analyst")  # Configurable agent persona
 PRODUCT_AUDIENCE = _get_secret("PRODUCT_AUDIENCE", "decision committee")  # Target audience
 
