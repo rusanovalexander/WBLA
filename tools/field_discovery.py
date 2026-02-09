@@ -90,9 +90,9 @@ Return a JSON array of field groups:
     "category": "DEAL",
     "fields": [
       {{
-        "name": "Facility Amount",
-        "description": "Total facility with currency",
-        "why_required": "Core parameter for credit assessment",
+        "name": "Transaction Amount",
+        "description": "Total amount with currency",
+        "why_required": "Core parameter for assessment",
         "data_type": "currency",
         "typical_source": "teaser",
         "priority": "CRITICAL"
@@ -263,7 +263,7 @@ Return a JSON array with all fields:
 [
   {{
     "id": 1,
-    "name": "Facility Amount",
+    "name": "Transaction Amount",
     "value": "[amount in deal currency]",
     "source_quote": "exact quote from the teaser...",
     "confidence": "HIGH"

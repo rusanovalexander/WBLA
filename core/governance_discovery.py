@@ -48,7 +48,7 @@ GUIDELINES_QUERIES = [
 # Extraction Prompt
 # =============================================================================
 
-GOVERNANCE_EXTRACTION_PROMPT = """You are analysing governance documents for a credit lending institution.
+GOVERNANCE_EXTRACTION_PROMPT = """You are analysing governance documents for an institution.
 From the excerpts below, extract the institution's specific framework.
 
 ## PROCEDURE DOCUMENT EXCERPTS

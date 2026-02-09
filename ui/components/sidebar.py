@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 import streamlit as st
+from config.settings import PRODUCT_NAME
 from core.tracing import TraceStore
 from ui.components.agent_dashboard import render_agent_dashboard_compact
 
@@ -18,7 +19,7 @@ from ui.components.agent_dashboard import render_agent_dashboard_compact
 def render_sidebar(tracer: TraceStore, handle_chat_fn):
     """Render the complete sidebar."""
     with st.sidebar:
-        st.title("🏦 CPS")
+        st.title(f"📋 {PRODUCT_NAME.upper()[:10]}")
         st.caption("Multi-Agent System with Native Tool Use")
 
         st.divider()

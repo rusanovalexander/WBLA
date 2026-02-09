@@ -14,6 +14,9 @@ from config.settings import PROJECT_ID, SEARCH_LOCATION, DATA_STORE_ID, DOC_TYPE
 
 logger = logging.getLogger(__name__)
 
+# Cached Discovery Engine client (avoid re-creating per search call)
+_search_client_cache: dict[str, Any] = {}
+
 
 def _get_serving_config() -> str:
     """Get the serving config path for search."""
@@ -127,15 +130,19 @@ def search_rag(query: str, num_results: int = 5) -> Dict[str, Any]:
         }
     
     try:
-        # Create client
-        opts = None
-        if SEARCH_LOCATION != "global":
-            opts = ClientOptions(api_endpoint=f"{SEARCH_LOCATION}-discoveryengine.googleapis.com")
-        
-        client = discoveryengine.SearchServiceClient(
-            credentials=get_credentials(),
-            client_options=opts
-        )
+        # Reuse cached client (avoids gRPC channel setup on every call)
+        cache_key = f"{PROJECT_ID}_{SEARCH_LOCATION}_{DATA_STORE_ID}"
+        if cache_key in _search_client_cache:
+            client = _search_client_cache[cache_key]
+        else:
+            opts = None
+            if SEARCH_LOCATION != "global":
+                opts = ClientOptions(api_endpoint=f"{SEARCH_LOCATION}-discoveryengine.googleapis.com")
+            client = discoveryengine.SearchServiceClient(
+                credentials=get_credentials(),
+                client_options=opts
+            )
+            _search_client_cache[cache_key] = client
         
         serving_config = _get_serving_config()
         
@@ -156,8 +163,8 @@ def search_rag(query: str, num_results: int = 5) -> Dict[str, Any]:
             )
         )
         
-        # Execute search
-        response = client.search(request)
+        # Execute search (with 30s timeout to prevent UI freeze)
+        response = client.search(request, timeout=30.0)
         
         # Parse results
         results = []

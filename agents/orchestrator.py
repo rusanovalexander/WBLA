@@ -10,7 +10,7 @@ Key changes:
 from __future__ import annotations
 from typing import Any
 
-from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block
+from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block, PRODUCT_NAME
 
 
 def _build_workflow_descriptions(governance_context: dict[str, Any] | None) -> str:
@@ -87,7 +87,7 @@ def _build_workflow_descriptions(governance_context: dict[str, Any] | None) -> s
 
 
 _ORCHESTRATOR_TEMPLATE = """
-You are the **Orchestrator Agent** - a Senior Credit Officer coordinating a multi-agent system for drafting credit packs.
+You are the **Orchestrator Agent** - a Senior Coordinator managing a multi-agent system for drafting {product_name} documents.
 
 <ROLE>
 You are the main coordinator. Your responsibilities:
@@ -297,6 +297,7 @@ def get_orchestrator_instruction(governance_context: dict[str, Any] | None = Non
     return _ORCHESTRATOR_TEMPLATE.format(
         workflow_descriptions=_build_workflow_descriptions(governance_context),
         verbose_block=get_verbose_block(),
+        product_name=PRODUCT_NAME,
     )
 
 

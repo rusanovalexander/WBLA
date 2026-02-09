@@ -10,7 +10,7 @@ Key changes:
 from __future__ import annotations
 from typing import Any
 
-from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block
+from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block, PRODUCT_NAME
 
 
 def _build_search_vocabulary(governance_context: dict[str, Any] | None) -> str:
@@ -21,7 +21,7 @@ def _build_search_vocabulary(governance_context: dict[str, Any] | None) -> str:
     return (
         "- Assessment approach decision criteria and thresholds\n"
         "- Available assessment approaches and when each applies\n"
-        "- Credit origination methods and their requirements\n"
+        "- Origination methods and their requirements\n"
         "- Decision trees and threshold criteria\n"
         "- Special rules for specific deal types"
     )
@@ -98,28 +98,26 @@ def _build_example_extraction(governance_context: dict[str, Any] | None) -> str:
             )
         return "\n".join(lines)
 
-    # Domain-neutral structural example — demonstrates format without CRE bias
+    # Domain-neutral structural example — demonstrates format without domain bias
     return """**Example Extraction (generic structure):**
 
-### DEAL STRUCTURE
+### TRANSACTION OVERVIEW
 
-The transaction is a [currency] [amount] [facility type] with a [tenor] [HIGH CONFIDENCE] [Source: "exact quote from teaser"]. The purpose is [purpose description] [HIGH CONFIDENCE] [Source: "exact quote"]. Pricing is [benchmark] plus [margin] basis points [HIGH CONFIDENCE] [Source: "exact quote"].
+The transaction is a [currency] [amount] [type/structure] with a [duration/term] [HIGH CONFIDENCE] [Source: "exact quote from teaser"]. The purpose is [purpose description] [HIGH CONFIDENCE] [Source: "exact quote"].
 
-### BORROWER AND STRUCTURE
+### PARTIES AND ENTITIES
 
-The borrower is [entity name], a [entity type] [HIGH CONFIDENCE] [Source: "exact quote"]. The ultimate beneficial owner is [owner details] [HIGH CONFIDENCE] [Source: "exact quote"]. This is a [new/existing] client relationship [MEDIUM CONFIDENCE] [Inferred: reasoning].
+The [primary entity] is [entity name], a [entity type] [HIGH CONFIDENCE] [Source: "exact quote"]. The [related party] is [details] [HIGH CONFIDENCE] [Source: "exact quote"].
 
-### FINANCIAL METRICS
+### KEY METRICS
 
-**Key Ratios:**
 - [Metric 1]: [value] [HIGH CONFIDENCE] [Source: "exact quote"]
 - [Metric 2]: [value] [HIGH CONFIDENCE] [Calculated: methodology]
 - [Metric 3]: [value] [MEDIUM CONFIDENCE] [Estimated: reasoning]
 
-### SECURITY PACKAGE
+### ADDITIONAL DETAILS
 
-The facility is secured by [collateral description] [HIGH CONFIDENCE] [Source: "exact quote"].
-[Additional security items with source attribution]
+[Any other relevant information from the teaser, with source attribution]
 
 ### IDENTIFIED GAPS
 
@@ -130,10 +128,10 @@ The facility is secured by [collateral description] [HIGH CONFIDENCE] [Source: "
 
 
 _PROCESS_ANALYST_TEMPLATE = """
-You are the **Process Analyst Agent** for a credit pack drafting system.
+You are the **Process Analyst Agent** for a {product_name} drafting system.
 
 <ROLE>
-You are an expert in credit processes and procedures. Your job is to:
+You are an expert in processes and procedures. Your job is to:
 1. Extract ALL data points from deal teasers (comprehensive extraction)
 2. Analyze deal characteristics (type, amount, asset class, etc.)
 3. Determine the correct process path based on the Procedure document
@@ -148,7 +146,7 @@ of this document in advance — you MUST search it to find relevant sections.
 
 **Discovery approach:**
 1. Start with broad queries to understand the document structure
-2. Search for credit assessment approaches (how to determine which assessment is needed)
+2. Search for assessment approaches (how to determine which assessment is needed)
 3. Search for proportionality criteria (thresholds that determine the approach)
 4. Search for origination methods (what type of document to produce)
 
@@ -175,7 +173,7 @@ You can autonomously search the Procedure document to find specific rules.
 <TOOL>search_procedure: "proportionality approach thresholds assessment"</TOOL>
 
 "What are the origination methods available?"
-<TOOL>search_procedure: "credit origination methods"</TOOL>
+<TOOL>search_procedure: "origination methods"</TOOL>
 
 "What size threshold triggers a full assessment?"
 <TOOL>search_procedure: "deal size threshold full assessment"</TOOL>
@@ -217,7 +215,7 @@ Follow this NATURAL LANGUAGE approach instead of using a rigid table.
 
 Write comprehensive sections that capture ALL information naturally. This allows downstream requirement discovery to find ANY information using semantic search, regardless of exact field names.
 
-The goal is a thorough analysis that reads like a credit analyst's memo, not a database dump.
+The goal is a thorough analysis that reads like a professional analyst's memo, not a database dump.
 
 </DATA_EXTRACTION_TASK>
 
@@ -395,6 +393,7 @@ def get_process_analyst_instruction(governance_context: dict[str, Any] | None = 
         risk_taxonomy=_build_risk_taxonomy(governance_context),
         example_extraction=_build_example_extraction(governance_context),
         verbose_block=get_verbose_block(),
+        product_name=PRODUCT_NAME,
     )
 
 

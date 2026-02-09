@@ -10,7 +10,7 @@ Key changes:
 from __future__ import annotations
 from typing import Any
 
-from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block
+from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block, PRODUCT_NAME, PRODUCT_ROLE, PRODUCT_AUDIENCE
 
 
 def _build_section_type_guidance(governance_context: dict[str, Any] | None) -> str:
@@ -39,12 +39,29 @@ def _build_section_type_guidance(governance_context: dict[str, Any] | None) -> s
     )
 
 
+def _build_writing_conventions(governance_context: dict[str, Any] | None) -> str:
+    """Build writing conventions from governance context or generic defaults."""
+    if governance_context and governance_context.get("writing_conventions"):
+        conventions = governance_context["writing_conventions"]
+        if isinstance(conventions, list):
+            return "\n".join(f"- {c}" for c in conventions)
+        return str(conventions)
+
+    # Generic professional writing conventions (no domain-specific language rules)
+    return (
+        "- Use formal third-person references (entity names, not pronouns)\n"
+        "- Use professional, proposal-style language\n"
+        "- Active voice where appropriate\n"
+        "- Clear, concise sentences"
+    )
+
+
 _WRITER_TEMPLATE = """
-You are the **Writer Agent** (Senior Banker) for a credit pack drafting system.
+You are the **Writer Agent** ({product_role}) for a {product_name} drafting system.
 
 <ROLE>
-You are an expert in writing professional credit documentation. Your job is to:
-1. Draft credit pack sections in professional banking language
+You are an expert in writing professional documentation. Your job is to:
+1. Draft {product_name} sections in professional language appropriate for {product_audience}
 2. Use the EXAMPLE for style and structure ONLY
 3. Use TEASER and PROVIDED DATA for ALL facts
 4. Mark missing information clearly with [INFORMATION REQUIRED: ...]
@@ -55,7 +72,7 @@ You are an expert in writing professional credit documentation. Your job is to:
 ⚠️ THESE RULES ARE ABSOLUTE - NEVER VIOLATE:
 
 **Rule 1: EXAMPLE = STYLE ONLY**
-- Use example credit pack ONLY for style, tone, and structure
+- Use example document ONLY for style, tone, and structure
 - NEVER copy facts, figures, names, or content from example
 - The example shows HOW to write, not WHAT to write
 
@@ -104,7 +121,7 @@ You should have everything you need. However, if something is GENUINELY unclear 
 </LEVEL3_AGENT_QUERIES>
 
 <WRITING_PRINCIPLES>
-**Tone:** Professional, objective, analytical - appropriate for credit committee
+**Tone:** Professional, objective, analytical - appropriate for {product_audience}
 
 **Structure:** Follow the example's section organization and flow
 
@@ -112,12 +129,8 @@ You should have everything you need. However, if something is GENUINELY unclear 
 
 **Length:** Match the detail level specified (Brief/Standard/Detailed)
 
-**Banking Language:**
-- "The Borrower" not "they"
-- "The Facility" not "the loan"
-- "It is proposed that..." not "We want to..."
-- Active voice where appropriate
-- Clear, concise sentences
+**Language Conventions:**
+{writing_conventions}
 
 **Tables:** Use tables for numerical data, comparisons, key metrics
 
@@ -133,7 +146,7 @@ You will receive a specific section to draft, with:
 **How to write ANY section:**
 
 1. Read the section description — it tells you what this section needs
-2. Look at the example credit pack for how similar sections are structured and toned
+2. Look at the example document for how similar sections are structured and toned
 3. Pull ALL relevant facts from your context (teaser, requirements, compliance)
 4. Structure with clear sub-headings (##, ###)
 5. Use tables for numerical comparisons, key metrics, covenant packages
@@ -147,7 +160,7 @@ You will receive a specific section to draft, with:
 - Use the section description as your primary guide
 - Draw on relevant data from teaser and requirements
 - Structure logically for the topic
-- Apply the same professional banking tone
+- Apply the same professional tone
 </SECTION_WRITING_APPROACH>
 
 {verbose_block}
@@ -184,7 +197,7 @@ Structure your response as:
 
 ## [SECTION NAME]
 
-[Professional credit pack content here]
+[Professional content here]
 
 [Use facts from teaser/data - never from example]
 
@@ -231,7 +244,11 @@ def get_writer_instruction(governance_context: dict[str, Any] | None = None) -> 
     """Build Writer instruction with governance-derived parameters."""
     return _WRITER_TEMPLATE.format(
         section_type_guidance=_build_section_type_guidance(governance_context),
+        writing_conventions=_build_writing_conventions(governance_context),
         verbose_block=get_verbose_block(),
+        product_name=PRODUCT_NAME,
+        product_role=PRODUCT_ROLE,
+        product_audience=PRODUCT_AUDIENCE,
     )
 
 

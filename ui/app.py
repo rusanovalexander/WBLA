@@ -24,6 +24,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from config.settings import (
     PROJECT_ID, MODEL_PRO, MODEL_FLASH, VERSION,
     DATA_STORE_ID, TEASERS_FOLDER, EXAMPLES_FOLDER,
+    PRODUCT_NAME,
     setup_environment, validate_config,
 )
 setup_environment()
@@ -72,7 +73,7 @@ from ui.components.agent_dashboard import render_agent_dashboard
 
 st.set_page_config(
     page_title=f"CP PoC v{VERSION}",
-    page_icon="🏦",
+    page_icon="📋",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -215,7 +216,7 @@ Answer concisely and helpfully.
 # =============================================================================
 
 def render_phase_setup():
-    st.header("🏦 CPS")
+    st.header(f"📋 {PRODUCT_NAME.upper()} System")
     st.subheader(f"v{VERSION} — Autonomous Multi-Agent System")
 
     if st.session_state.rag_ok is None:
@@ -277,24 +278,26 @@ def render_phase_setup():
         key="setup_teaser_upload",
     )
     if uploaded_teaser:
-        dest = TEASERS_FOLDER / uploaded_teaser.name
+        safe_name = Path(uploaded_teaser.name).name  # Strip directory components (path traversal defense)
+        dest = TEASERS_FOLDER / safe_name
         with open(dest, "wb") as out:
             out.write(uploaded_teaser.getbuffer())
         st.success(f"Uploaded teaser: {uploaded_teaser.name}")
 
     # --- Example credit pack upload ---
-    st.markdown("**Example Credit Pack** (optional — used as style/structure reference for drafting)")
+    st.markdown(f"**Example {PRODUCT_NAME.title()}** (optional — used as style/structure reference for drafting)")
     if docs.get("examples"):
         for f in docs["examples"]:
             st.write(f"📄 {Path(f).name}")
     uploaded_example = st.file_uploader(
-        "Upload example credit pack",
+        f"Upload example {PRODUCT_NAME}",
         type=["pdf", "docx", "txt"],
         accept_multiple_files=False,
         key="setup_example_upload",
     )
     if uploaded_example:
-        dest = EXAMPLES_FOLDER / uploaded_example.name
+        safe_name = Path(uploaded_example.name).name  # Strip directory components (path traversal defense)
+        dest = EXAMPLES_FOLDER / safe_name
         with open(dest, "wb") as out:
             out.write(uploaded_example.getbuffer())
         st.success(f"Uploaded example: {uploaded_example.name}")
@@ -438,13 +441,13 @@ def render_phase_analysis():
                     "Assessment Approach:",
                     value=st.session_state.process_path or "",
                     key="manual_assessment",
-                    placeholder="e.g., Full Creditworthiness Assessment",
+                    placeholder="Enter the assessment approach from your Procedure",
                 )
                 origination = st.text_input(
                     "Origination Method:",
                     value=st.session_state.origination_method or "",
                     key="manual_origination",
-                    placeholder="e.g., Credit Rationale",
+                    placeholder="Enter the origination method from your Procedure",
                 )
                 manual_reason = st.text_input("Reason for selection:", key="manual_reason")
 
@@ -799,7 +802,7 @@ def _auto_fill_requirements():
     teaser = st.session_state.teaser_text or ""
     analysis = st.session_state.extracted_data or ""
 
-    prompt = f"""You are extracting multiple values from a credit teaser and analysis.
+    prompt = f"""You are extracting multiple values from a deal teaser and analysis.
 
 ## SOURCE DOCUMENTS:
 
@@ -873,7 +876,7 @@ CRITICAL RULES:
 - If you can't find any requirements, return empty array: <json_output>[]</json_output>
 - Keep each "value" field CONCISE (max 200 chars). For complex data, include only the key figures.
   BAD: "Sponsor: ABC Corp, global real estate arm of XYZ... (500 chars)"
-  GOOD: "ABC Corp (AUM: $46Bn, 35+ years experience, 220+ professionals)"
+  GOOD: "ABC Corp (key metric: value, relevant experience/qualifications)"
 - For tables with many rows, summarize rather than listing every row in the value
 
 NOW: Extract ALL requirements you can find from the documents above.
@@ -978,7 +981,7 @@ def _ai_suggest_requirement(req: dict, tracer) -> dict | None:
     
     tracer.record("AISuggest", "START", f"Searching for: {req['name']}")
     
-    prompt = f"""You are extracting a specific value from a credit teaser and analysis.
+    prompt = f"""You are extracting a specific value from a deal teaser and analysis.
 
 ## TARGET REQUIREMENT:
 **Name:** {req['name']}
@@ -1044,7 +1047,7 @@ Example 1 (Simple value):
 <json_output>
 {{
   "value": "50,000,000",
-  "source_quote": "The senior facility of 50 million...",
+  "source_quote": "The total amount of 50 million...",
   "confidence": "HIGH",
   "found_in": "teaser"
 }}
@@ -1179,47 +1182,18 @@ def _generate_alternative_terms(requirement_name: str) -> list[str]:
     """
     Generate alternative search terms for a requirement.
 
-    Uses governance-discovered terminology when available,
-    plus common banking/lending terminology synonyms to improve matching.
+    Uses governance-discovered terminology when available.
+    No hardcoded domain-specific synonyms — all terminology comes from
+    governance discovery or basic string variations.
     """
 
-    # Start with governance-discovered terminology if available
+    # Build term map entirely from governance-discovered terminology
+    term_map: dict[str, list[str]] = {}
     gov_ctx = st.session_state.get("governance_context")
-    gov_terms = {}
     if gov_ctx and gov_ctx.get("terminology_map"):
         for term, synonyms in gov_ctx["terminology_map"].items():
             if isinstance(synonyms, list):
-                gov_terms[term.lower()] = synonyms
-
-    # Generic banking/lending synonyms (no domain-specific terms)
-    # Domain-specific terms are injected via governance discovery
-    term_map = {
-        # Financial metrics
-        "ltv": ["loan to value", "leverage", "ltv ratio", "loan-to-value"],
-        "dscr": ["debt service coverage", "debt service coverage ratio", "coverage ratio", "dsc"],
-        "icr": ["interest coverage", "interest coverage ratio", "ebitda to interest"],
-        "debt service": ["principal and interest", "p&i", "loan payments", "debt payments"],
-
-        # Transaction-related
-        "covenant": ["financial covenant", "undertaking", "agreement", "maintenance covenant"],
-        "security": ["collateral", "pledge", "mortgage", "charge", "guarantee"],
-        "facility": ["loan", "credit facility", "financing", "advance"],
-        "purpose": ["use of proceeds", "rationale", "reason", "objective"],
-        "tenor": ["term", "maturity", "duration", "loan term"],
-        "pricing": ["margin", "spread", "interest rate", "rate", "cost"],
-        "valuation": ["value", "appraisal", "market value", "asset value"],
-
-        # Party-related
-        "borrower": ["obligor", "debtor", "company", "entity", "spv"],
-        "guarantor": ["sponsor", "parent company", "guarantee provider"],
-        "sponsor": ["backer", "equity provider", "investor", "fund manager"],
-    }
-
-    # Merge governance terms into term_map (governance REPLACES defaults)
-    for key, synonyms in gov_terms.items():
-        # Governance-discovered synonyms fully replace hardcoded defaults
-        # This ensures document-driven terminology wins over generic fallbacks
-        term_map[key] = synonyms
+                term_map[term.lower()] = synonyms
     
     alternatives = []
     name_lower = requirement_name.lower()
@@ -1667,7 +1641,7 @@ def _build_drafting_context(structure: list, drafts: dict) -> dict:
 
 
 def render_phase_drafting():
-    st.header("✍️ Phase 4: Credit Pack Drafting")
+    st.header(f"✍️ Phase 4: {PRODUCT_NAME.title()} Drafting")
 
     structure = st.session_state.proposed_structure
     drafts = st.session_state.section_drafts
@@ -1809,7 +1783,7 @@ def render_phase_drafting():
                 st.info(f"Orchestrator: {routing.message_to_human}")
             if routing and routing.flags:
                 for flag in routing.flags:
-                    st.warning(f"{flag.severity.value}: {flag.description}")
+                    st.warning(f"{flag.severity.value}: {flag.text}")
             can_export = True
             if routing and not routing.can_proceed:
                 st.warning("Orchestrator recommends review before export.")
@@ -1841,7 +1815,7 @@ def render_phase_complete():
             all_content.append(f"# {name}\n\n{content}")
     st.session_state.final_document = "\n\n---\n\n".join(all_content)
 
-    with st.expander("📄 Full Credit Pack Preview", expanded=True):
+    with st.expander(f"📄 Full {PRODUCT_NAME.title()} Preview", expanded=True):
         st.markdown(st.session_state.final_document[:5000])
         if len(st.session_state.final_document) > 5000:
             st.caption(f"... ({len(st.session_state.final_document):,} total chars)")
@@ -1868,7 +1842,7 @@ def render_phase_complete():
                     "process_path": st.session_state.process_path,
                     "origination_method": st.session_state.origination_method,
                 }
-                filename = f"credit_pack_{datetime.now().strftime('%Y%m%d_%H%M')}.docx"
+                filename = f"{PRODUCT_NAME.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.docx"
                 path = generate_docx(st.session_state.final_document, filename, metadata)
                 if path:
                     st.session_state["_docx_path"] = path

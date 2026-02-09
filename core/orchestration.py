@@ -22,7 +22,7 @@ import logging
 import re
 from typing import Any, Callable
 
-from config.settings import MODEL_PRO, MODEL_FLASH, AGENT_MODELS
+from config.settings import MODEL_PRO, MODEL_FLASH, AGENT_MODELS, PRODUCT_NAME
 from core.llm_client import call_llm, call_llm_with_tools, call_llm_streaming, require_success
 from core.tracing import TraceStore, get_tracer
 from core.parsers import (
@@ -185,8 +185,9 @@ def _extract_structured_decision(
                     })
                     parsed["assessment_approach"] = validated.assessment_approach
                     parsed["origination_method"] = validated.origination_method
-                except Exception:
-                    pass  # Keep raw parsed if validation fails
+                except Exception as e:
+                    logger.warning("Pydantic validation failed for ProcessDecision: %s", e)
+                    tracer.record("Extraction", "VALIDATION_WARN", f"Pydantic validation skipped: {e}")
                 tracer.record("Extraction", "SUCCESS", f"Found: {parsed.get('assessment_approach', '?')}")
                 return parsed
             else:
@@ -242,7 +243,8 @@ def _extract_compliance_checks(
                 try:
                     validated = ComplianceCheck.model_validate(check_data)
                     validated_checks.append(validated.model_dump())
-                except Exception:
+                except Exception as e:
+                    logger.warning("Pydantic validation failed for ComplianceCheck: %s", e)
                     validated_checks.append(check_data)  # Keep raw if validation fails
             tracer.record("Extraction", "SUCCESS", f"Extracted {len(validated_checks)} checks")
             return validated_checks
@@ -525,6 +527,10 @@ Output your analysis and list your RAG queries using:
 """
 
     planning = call_llm(planning_prompt, MODEL_PRO, 0.0, 3000, "ProcessAnalyst", tracer)
+    if not planning.success:
+        tracer.record("ProcessAnalyst", "LLM_FAIL", f"Planning call failed: {planning.error or 'Unknown'}")
+        return {"full_analysis": f"[Analysis failed: {planning.error}]", "process_path": "", "origination_method": "",
+                "procedure_sources": {}, "assessment_reasoning": "", "rag_query_count": 0}
 
     # Step 2: Execute RAG — use agent's queries, NO hardcoded injection
     tool_calls = parse_tool_calls(planning.text, "search_procedure")
@@ -588,6 +594,10 @@ You MUST cite specific Procedure sections. Do NOT guess limits — only use valu
 """
 
     final = call_llm(analysis_prompt, MODEL_PRO, 0.0, 16384, "ProcessAnalyst", tracer)
+    if not final.success:
+        tracer.record("ProcessAnalyst", "LLM_FAIL", f"Analysis call failed: {final.error or 'Unknown'}")
+        return {"full_analysis": f"[Analysis failed: {final.error}]", "process_path": "", "origination_method": "",
+                "procedure_sources": procedure_results, "assessment_reasoning": "", "rag_query_count": len(tool_calls)}
 
     tracer.record("ProcessAnalyst", "ANALYSIS_DONE", f"Generated {len(final.text)} chars")
 
@@ -605,7 +615,7 @@ You MUST cite specific Procedure sections. Do NOT guess limits — only use valu
 # Dynamic Requirements Discovery (replaces static 28 fields)
 # =============================================================================
 
-REQUIREMENTS_DISCOVERY_PROMPT = """You are a credit analyst. Based on this deal analysis, the determined process path, and the governance document context below, identify ALL information requirements needed for the credit pack.
+REQUIREMENTS_DISCOVERY_PROMPT = """You are an analyst. Based on this deal analysis, the determined process path, and the governance document context below, identify ALL information requirements needed for the output document.
 
 ## DEAL ANALYSIS
 {analysis_text}
@@ -693,11 +703,11 @@ def discover_requirements(
     # --- RAG grounding: search Procedure for requirements specific to this path ---
     procedure_rag_context = "(No Procedure context available — using general knowledge.)"
     if search_procedure_fn:
-        om = origination_method or "credit assessment"
-        aa = assessment_approach or "credit assessment"
+        om = origination_method or "assessment"
+        aa = assessment_approach or "assessment"
         rag_queries = [
             f"information requirements for {om}",
-            f"required data fields {aa} credit assessment",
+            f"required data fields {aa} assessment",
             f"what information must be provided for {om} origination",
         ]
         rag_results: dict[str, Any] = {}
@@ -734,6 +744,10 @@ def discover_requirements(
     )
 
     result = call_llm(prompt, MODEL_PRO, 0.0, 5000, "RequirementsDiscovery", tracer)
+    if not result.success:
+        tracer.record("RequirementsDiscovery", "LLM_FAIL", f"LLM call failed: {result.error or 'Unknown'}")
+        return []
+
     field_groups = safe_extract_json(result.text, "array")
 
     if not field_groups:
@@ -937,6 +951,9 @@ You MUST plan your searches. List each search query:
 """
 
     planning = call_llm(planning_prompt, MODEL_PRO, 0.0, 2500, "ComplianceAdvisor", tracer)
+    if not planning.success:
+        tracer.record("ComplianceAdvisor", "LLM_FAIL", f"Planning call failed: {planning.error or 'Unknown'}")
+        return f"[Compliance analysis failed: {planning.error}]"
 
     tool_calls = parse_tool_calls(planning.text, "search_guidelines")
 
@@ -998,6 +1015,9 @@ Include ALL applicable criteria found in the Guidelines.
 """
 
     result = call_llm(assessment_prompt, MODEL_PRO, 0.0, 32000, "ComplianceAdvisor", tracer)
+    if not result.success:
+        tracer.record("ComplianceAdvisor", "LLM_FAIL", f"Assessment call failed: {result.error or 'Unknown'}")
+        return f"[Compliance assessment failed: {result.error}]"
     return result.text
 
 
@@ -1088,12 +1108,27 @@ def run_orchestrator_decision(
     analysis_prompt += "\nProvide your complete analysis: observations, risk flags, plan adjustments, and recommendations.\n"
 
     analysis_result = call_llm(analysis_prompt, MODEL_PRO, 0.1, 3000, "Orchestrator", tracer)
+    if not analysis_result.success:
+        tracer.record("Orchestrator", "LLM_FAIL", f"Analysis call failed: {analysis_result.error or 'Unknown'}")
+        return OrchestratorInsights(
+            full_text=f"[Orchestrator analysis failed: {analysis_result.error}]",
+            can_proceed=False, requires_human_review=True,
+            message_to_human="Orchestrator analysis failed — manual review required.",
+        )
 
     routing_prompt = ORCHESTRATOR_ROUTING_PROMPT.format(
         analysis_text=analysis_result.text,
         phase=phase,
     )
     routing_result = call_llm(routing_prompt, MODEL_FLASH, 0.0, 3000, "Orchestrator", tracer)
+    if not routing_result.success:
+        tracer.record("Orchestrator", "LLM_FAIL", f"Routing call failed: {routing_result.error or 'Unknown'}")
+        return OrchestratorInsights(
+            full_text=analysis_result.text,
+            can_proceed=False, requires_human_review=True,
+            message_to_human="Orchestrator routing failed — manual review required.",
+        )
+
     routing = safe_extract_json(routing_result.text, "object")
 
     insights = OrchestratorInsights(full_text=analysis_result.text)
@@ -1147,7 +1182,7 @@ def generate_section_structure(
     governance_context: dict | None = None,
 ) -> list[dict]:
     """
-    Generate credit pack section structure adapted to process path and deal type.
+    Generate document section structure adapted to process path and deal type.
     Now grounded in Procedure document via RAG.
     """
     if tracer is None:
@@ -1158,10 +1193,10 @@ def generate_section_structure(
     # --- RAG grounding: search Procedure for section requirements ---
     procedure_sections_context = "(No Procedure context available — using general knowledge.)"
     if search_procedure_fn:
-        om = origination_method or "credit pack"
-        aa = assessment_approach or "credit assessment"
+        om = origination_method or "document"
+        aa = assessment_approach or "assessment"
         rag_queries = [
-            f"required sections for {om} credit pack document",
+            f"required sections for {om} document",
             f"content structure {om} origination method",
             f"section requirements {aa} assessment approach",
         ]
@@ -1199,7 +1234,7 @@ def generate_section_structure(
                 + json.dumps(matched_template, indent=2)
             )
 
-    prompt = f"""Determine the section structure for this credit pack.
+    prompt = f"""Determine the section structure for this {PRODUCT_NAME}.
 
 ## PROCESS PATH
 Assessment Approach: {assessment_approach}
@@ -1213,12 +1248,12 @@ Origination Method: {origination_method}
 ## DEAL ANALYSIS (excerpt)
 {analysis_text[:3000]}
 
-## EXAMPLE CREDIT PACK (for reference)
+## EXAMPLE DOCUMENT (for reference)
 {example_text[:5000] if example_text else "(No example provided)"}
 
 ## INSTRUCTIONS
 
-Design the section structure for THIS specific credit pack:
+Design the section structure for THIS specific {PRODUCT_NAME}:
 
 1. **Use the Procedure document above as primary guide:**
    - If the Procedure specifies required sections for this origination method, use those
@@ -1243,6 +1278,10 @@ Return ONLY the JSON array.
 """
 
     result = call_llm(prompt, MODEL_PRO, 0.0, 4000, "StructureGen", tracer)
+    if not result.success:
+        tracer.record("StructureGen", "LLM_FAIL", f"Structure generation failed: {result.error or 'Unknown'}")
+        return []
+
     sections = safe_extract_json(result.text, "array")
 
     if sections and len(sections) >= 2:
@@ -1253,7 +1292,7 @@ Return ONLY the JSON array.
     tracer.record("StructureGen", "RETRY", "First attempt failed JSON extraction — retrying with simplified prompt")
     logger.warning("Section structure first attempt failed, retrying with MODEL_FLASH")
 
-    retry_prompt = f"""Generate a JSON array of credit pack sections for this deal.
+    retry_prompt = f"""Generate a JSON array of {PRODUCT_NAME} sections for this deal.
 
 Assessment Approach: {assessment_approach}
 Origination Method: {origination_method}
@@ -1288,7 +1327,7 @@ def draft_section(
     tracer: TraceStore | None = None,
     governance_context: dict[str, Any] | None = None,
 ) -> SectionDraft:
-    """Draft a credit pack section with full context."""
+    """Draft a document section with full context."""
     if tracer is None:
         tracer = get_tracer()
 
@@ -1346,7 +1385,7 @@ Detail Level: {section.get('detail_level', 'Standard')}
 
 {previously_context}
 
-### Example Credit Pack (STYLE REFERENCE ONLY — never copy facts):
+### Example Document (STYLE REFERENCE ONLY — never copy facts):
 {example_text}
 
 ## NOW: DRAFT THIS SECTION
@@ -1363,6 +1402,8 @@ Remember:
     result = call_llm_streaming(
         prompt, MODEL_PRO, 0.3, 8000, "Writer", tracer=tracer
     )
+    if not result.success:
+        tracer.record("Writer", "LLM_FAIL", f"Drafting call failed: {result.error or 'Unknown'}")
 
     agent_queries_used: list[AgentMessage] = []
     if agent_bus:

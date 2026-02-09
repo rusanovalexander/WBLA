@@ -62,6 +62,14 @@ _SECRETS_KEY_PATH = _init_service_account_from_secrets()
 VERSION = "3.2.0"
 
 # =============================================================================
+# Product / Domain Configuration (avoids hardcoded domain assumptions)
+# =============================================================================
+
+PRODUCT_NAME = _get_secret("PRODUCT_NAME", "credit pack")  # Configurable output document name
+PRODUCT_ROLE = _get_secret("PRODUCT_ROLE", "Senior Analyst")  # Configurable agent persona
+PRODUCT_AUDIENCE = _get_secret("PRODUCT_AUDIENCE", "decision committee")  # Target audience
+
+# =============================================================================
 # Google Cloud Configuration
 # =============================================================================
 
@@ -126,7 +134,7 @@ for _folder in [PROCEDURE_FOLDER, GUIDELINES_FOLDER, EXAMPLES_FOLDER, TEASERS_FO
 
 DOC_TYPE_KEYWORDS = {
     "Procedure": ["procedure", "assessment", "process", "manual", "instruction", "operating", "methodology"],
-    "Guidelines": ["guideline", "guidance", "lending", "policy", "standard", "framework", "criteria", "rule"],
+    "Guidelines": ["guideline", "guidance", "policy", "standard", "framework", "criteria", "rule"],
 }
 
 # =============================================================================

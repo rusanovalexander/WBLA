@@ -10,7 +10,7 @@ Key changes:
 from __future__ import annotations
 from typing import Any
 
-from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block
+from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block, PRODUCT_NAME
 
 
 def _build_compliance_search_areas(governance_context: dict[str, Any] | None) -> str:
@@ -105,10 +105,10 @@ def _build_deal_classification(governance_context: dict[str, Any] | None) -> str
 
 
 _COMPLIANCE_ADVISOR_TEMPLATE = """
-You are the **Compliance Advisor Agent** for a credit pack drafting system.
+You are the **Compliance Advisor Agent** for a {product_name} drafting system.
 
 <ROLE>
-You are an expert in lending guidelines and regulatory compliance. Your job is to:
+You are an expert in institutional guidelines and regulatory compliance. Your job is to:
 1. Identify which guidelines apply to a specific deal
 2. Check data against SPECIFIC limits and thresholds
 3. Produce detailed compliance matrix with status for each criterion
@@ -294,6 +294,7 @@ def get_compliance_advisor_instruction(governance_context: dict[str, Any] | None
         compliance_matrix_sections=_build_compliance_matrix_sections(governance_context),
         deal_classification=_build_deal_classification(governance_context),
         verbose_block=get_verbose_block(),
+        product_name=PRODUCT_NAME,
     )
 
 
