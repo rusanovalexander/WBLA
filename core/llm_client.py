@@ -154,7 +154,12 @@ def call_llm(
                 max_tokens=max_tokens,
             )
 
-            result_text = response.text
+            # Guard: response.text can fail if no candidates (e.g., safety block, cancelled)
+            try:
+                result_text = response.text
+            except (ValueError, AttributeError):
+                result_text = "[No text in response — model may have returned empty/blocked output]"
+                logger.warning("Response had no text for %s (candidates may be empty)", agent_name)
             ctx["response_text"] = result_text
 
             # Extract token counts if available
@@ -248,24 +253,32 @@ def call_llm_with_backoff(
             or "resourceexhausted" in error_lower
             or "quota" in error_lower
         )
+        # 499 CANCELLED is transient — worth retrying
+        is_transient = (
+            "499" in error_lower
+            or "cancelled" in error_lower
+            or "canceled" in error_lower
+        )
+        is_retryable = is_rate_limit or is_transient
 
-        if is_rate_limit and attempt < max_retries - 1:
+        if is_retryable and attempt < max_retries - 1:
             wait_time = min(2 ** (attempt + 1), 30)
+            retry_reason = "rate limit" if is_rate_limit else "transient error (499/cancelled)"
             tracer.record(
                 agent_name, "RATE_LIMIT",
-                f"Hit rate limit, waiting {wait_time}s before retry {attempt + 2}/{max_retries}"
+                f"Hit {retry_reason}, waiting {wait_time}s before retry {attempt + 2}/{max_retries}"
             )
             logger.warning(
-                "Rate limit hit for %s, waiting %ds (attempt %d/%d)",
-                agent_name, wait_time, attempt + 1, max_retries
+                "%s for %s, waiting %ds (attempt %d/%d)",
+                retry_reason.capitalize(), agent_name, wait_time, attempt + 1, max_retries
             )
             time.sleep(wait_time)
             continue  # Retry
         else:
             # Non-retryable error or exhausted retries
-            if is_rate_limit:
+            if is_retryable:
                 tracer.record(agent_name, "RATE_LIMIT_EXCEEDED", "All retries exhausted")
-                logger.error("Rate limit retries exhausted for %s", agent_name)
+                logger.error("Retries exhausted for %s", agent_name)
             return result
 
     return result
@@ -428,11 +441,19 @@ def call_llm_with_tools(
             tracer.record(agent_name, "ERROR", f"Round {round_num + 1}: {e}")
             break
 
+        # Guard against empty/cancelled responses (e.g., 499 CANCELLED)
+        if not response.candidates:
+            logger.warning("Tool round %d: no candidates in response (cancelled/empty)", round_num + 1)
+            tracer.record(agent_name, "WARNING", f"Round {round_num + 1}: empty response (no candidates)")
+            break
+
         # Check if model wants to call a function
         function_calls = []
         text_parts = []
 
         for candidate in response.candidates:
+            if not candidate.content or not candidate.content.parts:
+                continue
             for part in candidate.content.parts:
                 if hasattr(part, "function_call") and part.function_call:
                     function_calls.append(part.function_call)

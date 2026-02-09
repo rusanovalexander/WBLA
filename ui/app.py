@@ -1020,9 +1020,9 @@ Remember: Use SEMANTIC MATCHING - look for the concept, not just exact word matc
 Output ONLY the JSON between <json_output></json_output> tags with NO other text before or after.
 """
     
-    # Increased token budget from 800 to 3000 to handle complex values
+    # Increased token budget to handle complex multi-line values (sponsor profiles, rent rolls, etc.)
     # Use backoff retry to handle rate limits gracefully
-    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.0, 3000, "AISuggest", tracer)
+    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.0, 4000, "AISuggest", tracer)
     
     # Use improved parser with XML tag support
     parsed = safe_extract_json(result.text, "object")
@@ -1094,7 +1094,7 @@ Be flexible and generous in matching. If you find something that seems related t
 include it even if the wording is different.
 """
     
-    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.1, 3000, "AISuggestRetry", tracer)
+    result = call_llm_with_backoff(prompt, MODEL_PRO, 0.1, 4000, "AISuggestRetry", tracer)
     parsed = safe_extract_json(result.text, "object")
     
     if parsed and parsed.get("value"):

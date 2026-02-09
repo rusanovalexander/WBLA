@@ -280,21 +280,36 @@ def safe_extract_json(text: str, expect_type: str = "object") -> Any:
         )
         return None
 
-    # IMPROVEMENT 5: Find matching end — handle nested structures properly
-    depth = 0
+    # IMPROVEMENT 5: Find matching end — track ALL bracket types to avoid
+    # premature closure (e.g., `[{"id": 4]}` where `]` is misplaced)
+    brace_depth = 0  # {}
+    bracket_depth = 0  # []
+    in_str = False
     for i in range(start, len(cleaned)):
-        if cleaned[i] == start_char:
-            depth += 1
-        elif cleaned[i] == end_char:
-            depth -= 1
-            if depth == 0:
-                json_str = cleaned[start:i + 1]
-                result = _try_parse_json(json_str)
-                if result is not None:
-                    logger.info("Successfully parsed JSON (%d chars)", len(json_str))
-                    return result
-                # If first match fails, keep looking
-                break
+        ch = cleaned[i]
+        if ch == '\\' and in_str:
+            continue  # skip escaped chars
+        if ch == '"' and (i == 0 or cleaned[i - 1] != '\\'):
+            in_str = not in_str
+        if in_str:
+            continue
+        if ch == '{':
+            brace_depth += 1
+        elif ch == '}':
+            brace_depth -= 1
+        elif ch == '[':
+            bracket_depth += 1
+        elif ch == ']':
+            bracket_depth -= 1
+        # Only match when ALL brackets are closed
+        if brace_depth == 0 and bracket_depth == 0:
+            json_str = cleaned[start:i + 1]
+            result = _try_parse_json(json_str)
+            if result is not None:
+                logger.info("Successfully parsed JSON (%d chars)", len(json_str))
+                return result
+            # If first match fails, keep looking
+            break
 
     # IMPROVEMENT 6: Fallback to simple slice approach
     end = cleaned.rfind(end_char)
