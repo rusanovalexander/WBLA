@@ -43,8 +43,8 @@ class ChangeLog:
             "timestamp": datetime.now().isoformat(),
             "type": change_type,
             "field": field_name,
-            "old_value": old_value[:200] if old_value else "",  # Truncate for storage
-            "new_value": new_value[:200] if new_value else "",
+            "old_value": old_value[:1000] if old_value else "",
+            "new_value": new_value[:1000] if new_value else "",
             "phase": phase,
             "user_note": user_note,
             "metadata": metadata or {},

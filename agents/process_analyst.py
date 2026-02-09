@@ -33,14 +33,10 @@ def _build_extraction_sections(governance_context: dict[str, Any] | None) -> str
         cats = governance_context["requirement_categories"]
         return "\n".join(f"- {cat}" for cat in cats)
     return (
-        "- Deal Structure\n"
-        "- Borrower and Structure\n"
-        "- Sponsor Information (if applicable)\n"
-        "- Asset Characteristics\n"
-        "- Financial Metrics\n"
-        "- Security Package\n"
-        "- Transaction Context\n"
-        "- Identified Gaps"
+        "Organize your extraction by whatever logical categories emerge from the teaser.\n"
+        "Typical structures include deal details, entity information, financial data, and security,\n"
+        "but you MUST adapt the sections to the specific deal type and content.\n"
+        "Always include an 'Identified Gaps' section at the end."
     )
 
 
@@ -48,14 +44,19 @@ def _build_risk_taxonomy(governance_context: dict[str, Any] | None) -> str:
     """Build risk assessment template from governance context or defaults."""
     if governance_context and governance_context.get("risk_taxonomy"):
         cats = governance_context["risk_taxonomy"]
-    else:
-        cats = ["Credit Risk", "Market Risk", "Operational Risk", "Structural Risk"]
-    lines = []
-    for cat in cats:
-        lines.append(f"**{cat}:**")
-        lines.append(f"- [Key {cat.lower()} factors]")
-        lines.append(f"- [Initial assessment]\n")
-    return "\n".join(lines)
+        lines = []
+        for cat in cats:
+            lines.append(f"**{cat}:**")
+            lines.append(f"- [Key {cat.lower()} factors]")
+            lines.append(f"- [Initial assessment]\n")
+        return "\n".join(lines)
+    return (
+        "Identify the risk categories that emerge from the deal characteristics and any "
+        "governance documents. For each risk category you identify:\n"
+        "**[Risk Category]:**\n"
+        "- [Key factors]\n"
+        "- [Initial assessment]\n"
+    )
 
 
 def _build_asset_class_hints(governance_context: dict[str, Any] | None) -> str:
@@ -91,8 +92,8 @@ def _build_example_extraction(governance_context: dict[str, Any] | None) -> str:
             lines.append(
                 f"[Extract all information related to {cat.lower()} from the teaser. "
                 f'Include exact figures with source quotes, e.g.: '
-                f'"The facility amount is EUR 50 million" [HIGH CONFIDENCE] '
-                f'[Source: "senior facility of EUR 50 million"]. '
+                f'"The [key metric] is [value with unit]" [HIGH CONFIDENCE] '
+                f'[Source: "exact quote from teaser"]. '
                 f"Mark missing information as NOT STATED.]\n"
             )
         return "\n".join(lines)

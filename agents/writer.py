@@ -30,14 +30,12 @@ def _build_section_type_guidance(governance_context: dict[str, Any] | None) -> s
 
     # Default: generic guidance that works for any deal type
     return (
-        "- Summary/overview sections → lead with the ask, key terms, recommendation\n"
-        "- Entity sections (borrower/sponsor) → legal structure, ownership, track record, financials\n"
-        "- Asset/property sections → description, location, characteristics, valuation, market position\n"
-        "- Financial sections → historical performance, projections, key ratios, sensitivity\n"
-        "- Risk sections → identified risks, mitigants, residual risk, stress scenarios\n"
-        "- Compliance sections → reference compliance assessment results, exceptions, conditions\n"
-        "- Security sections → package overview, covenants, monitoring\n"
-        "- Recommendation sections → strengths, risks, conditions, approval request"
+        "Adapt the writing style to each section's purpose:\n"
+        "- Introductory/summary sections → lead with key conclusions, then supporting detail\n"
+        "- Analytical sections → present data, then interpretation and implications\n"
+        "- Assessment sections → state findings, evidence, and recommendations\n"
+        "- Descriptive sections → relevant characteristics, context, and significance\n"
+        "Match the structure to what the section title implies about its content."
     )
 
 

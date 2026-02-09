@@ -297,17 +297,9 @@ def get_terminology_synonyms(governance_context: dict | None = None) -> str:
         if lines:
             return "\n".join(lines)
 
-    # Generic banking defaults — no domain-specific terms
-    # Governance discovery will inject domain-specific synonyms when available
-    return (
-        '   - "Facility Amount" = "Loan Amount" = "Credit Facility" = "Financing Amount"\n'
-        '   - "Borrower" = "Obligor" = "Debtor" = "Client"\n'
-        '   - "Tenor" = "Term" = "Maturity" = "Duration"\n'
-        '   - "Pricing" = "Margin" = "Spread" = "Interest Rate"\n'
-        '   - "Security" = "Collateral" = "Pledge" = "Guarantee"\n'
-        '   - "Loan to Value" = "LTV" = "Leverage" = "LTV Ratio"\n'
-        '   - "Debt Service Coverage" = "DSCR" = "Coverage Ratio" = "DSC"'
-    )
+    # No hardcoded synonyms — governance discovery provides domain-specific terms
+    # The LLM will use its own semantic understanding for synonym matching
+    return ""
 
 
 # =============================================================================

@@ -19,14 +19,10 @@ def _build_compliance_search_areas(governance_context: dict[str, Any] | None) ->
         areas = governance_context["compliance_framework"]
         return "\n".join(f"- {area}" for area in areas)
     return (
-        "- Credit granting criteria and thresholds\n"
-        "- Security package requirements\n"
-        "- Asset class specific rules\n"
-        "- Financial ratio limits and requirements\n"
-        "- Valuation and collateral requirements\n"
-        "- Sector-specific guidance\n"
-        "- Exception/deviation processes\n"
-        "- Covenant requirements"
+        "Search the Guidelines document broadly to discover all applicable compliance areas.\n"
+        "Focus on areas relevant to the specific deal characteristics.\n"
+        "Typical areas may include approval criteria, security requirements, financial limits,\n"
+        "and exception processes — but adapt to what the Guidelines actually contain."
     )
 
 
@@ -43,13 +39,13 @@ def _build_search_examples(governance_context: dict[str, Any] | None) -> str:
         return "\n\n".join(examples)
     return (
         '"I need to verify specific limits for this deal type..."\n'
-        '<TOOL>search_guidelines: "credit granting criteria limits"</TOOL>\n\n'
-        '"Checking financial ratio requirements..."\n'
-        '<TOOL>search_guidelines: "financial ratio minimum requirement"</TOOL>\n\n'
-        '"What security is required?"\n'
-        '<TOOL>search_guidelines: "security package requirements"</TOOL>\n\n'
-        '"Are there special rules for this asset class?"\n'
-        '<TOOL>search_guidelines: "asset class specific rules requirements"</TOOL>'
+        '<TOOL>search_guidelines: "applicable requirements for this deal type"</TOOL>\n\n'
+        '"Checking limit requirements..."\n'
+        '<TOOL>search_guidelines: "limits and thresholds"</TOOL>\n\n'
+        '"What structural requirements apply?"\n'
+        '<TOOL>search_guidelines: "structural requirements"</TOOL>\n\n'
+        '"Are there specific rules for this category?"\n'
+        '<TOOL>search_guidelines: "specific rules for this category"</TOOL>'
     )
 
 
@@ -72,38 +68,24 @@ For EACH criterion you find, add a row:
 Include ALL criteria found via RAG search — do not limit to a predefined list.
 """)
         return "\n---\n".join(sections)
-    # Default: 3 matrix categories
+    # Default: open-ended matrix driven by Guidelines document
     return """
-### 2. 📊 COMPLIANCE MATRIX - CREDIT GRANTING CRITERIA
+### 2. 📊 COMPLIANCE MATRIX
 
-Search the Guidelines for ALL credit granting criteria that apply to this deal type.
-For EACH criterion you find, add a row:
+Organize your compliance assessment into sections based on the categories
+you discover in the Guidelines document. For EACH category you find:
 
 | Criterion | Guideline Limit | Deal Value | Status | Evidence | Reference |
 |-----------|-----------------|------------|--------|----------|-----------|
 | [criterion name] | [MUST/SHOULD] [limit from RAG] | [value from deal data] | ✅/⚠️/❌ | "[source quote]" | [Section ref from RAG] |
 
+- State the guideline criterion and its source section
+- State the deal's actual value or status
+- Assess PASS / REVIEW / FAIL with evidence
+- Note any conditions, exceptions, or required actions
+
 Include ALL criteria found via RAG search — do not limit to a predefined list.
-
----
-
-### 3. 📊 COMPLIANCE MATRIX - SECURITY & STRUCTURAL REQUIREMENTS
-
-Search for security/structural requirements that apply to this deal type:
-
-| Requirement | Guideline Requirement | Deal Structure | Status | Notes |
-|-------------|----------------------|----------------|--------|-------|
-| [requirement from RAG] | [MUST/SHOULD] | [from deal data] | ✅/⚠️/❌ | [notes] |
-
----
-
-### 4. 📊 COMPLIANCE MATRIX - ADDITIONAL CRITERIA
-
-Any other compliance checks relevant to this deal:
-
-| Requirement | Guideline | Assessment | Status | Evidence |
-|-------------|-----------|------------|--------|----------|
-| [from RAG] | [MUST/SHOULD] | [assessment] | ✅/⚠️/❌ | "[quote]" |
+Group the criteria by whatever categories emerge from the Guidelines document.
 """
 
 
@@ -117,9 +99,8 @@ def _build_deal_classification(governance_context: dict[str, Any] | None) -> str
             lines.append(f"- {dim_label}: [as identified]")
         return "\n".join(lines)
     return (
-        "- Deal type: [as identified from teaser]\n"
-        "- Asset class: [as identified]\n"
-        "- Special features: [if any]"
+        "Classify the deal along the dimensions used in the Guidelines document.\n"
+        "For each dimension, state the value as identified from the teaser."
     )
 
 

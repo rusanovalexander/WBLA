@@ -400,6 +400,24 @@ def call_llm_streaming(
 
 
 # =============================================================================
+# Result Validation Utility (AG-H3)
+# =============================================================================
+
+def require_success(
+    result: LLMCallResult,
+    agent_name: str = "",
+    tracer: TraceStore | None = None,
+) -> LLMCallResult:
+    """Validate that an LLM call succeeded. Raises RuntimeError on failure."""
+    if not result.success:
+        name = agent_name or result.agent_name
+        if tracer:
+            tracer.record(name, "LLM_FAIL", result.error or "Unknown error")
+        raise RuntimeError(f"LLM call failed for {name}: {result.error}")
+    return result
+
+
+# =============================================================================
 # Native Function Calling
 # =============================================================================
 
@@ -437,6 +455,8 @@ def call_llm_with_tools(
     if tracer is None:
         tracer = get_tracer()
 
+    import time as _time  # AG-M4: for wall-clock timeout
+
     from google.genai import types
 
     client = _get_client()
@@ -453,8 +473,16 @@ def call_llm_with_tools(
     all_text_parts: list[str] = []
     total_tokens_in = estimate_tokens(prompt)
     total_tokens_out = 0
+    _loop_start = _time.time()
+    _max_duration = 120  # AG-M4: 2-minute wall-clock timeout
 
     for round_num in range(max_tool_rounds):
+        # AG-M4: Wall-clock timeout check
+        elapsed = _time.time() - _loop_start
+        if elapsed > _max_duration:
+            tracer.record(agent_name, "TIMEOUT", f"Tool loop exceeded {_max_duration}s after {round_num} rounds")
+            break
+
         tracer.record(
             agent_name,
             "TOOL_ROUND",
@@ -462,11 +490,14 @@ def call_llm_with_tools(
             model=model,
         )
 
+        # AG-M1: Route through retryable _call_gemini for per-round retry
         try:
-            response = client.models.generate_content(
+            response = _call_gemini(
+                prompt=contents,
                 model=model,
-                contents=contents,
-                config=config,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                tools=tools,
             )
         except Exception as e:
             logger.error("Tool call round %d failed: %s", round_num + 1, e, exc_info=True)
@@ -527,15 +558,20 @@ def call_llm_with_tools(
                 f"{tool_name} → {len(result_str)} chars",
             )
 
+            # AG-M6: Add truncation marker so the model knows data was lost
+            truncated_result = result_str
+            if len(result_str) > 4000:
+                truncated_result = result_str[:4000] + f"\n[TRUNCATED: original was {len(result_str)} chars — ask a more specific question if needed]"
+
             function_response_parts.append(
                 types.Part(
                     function_response=types.FunctionResponse(
                         name=tool_name,
-                        response={"result": result_str[:4000]},
+                        response={"result": truncated_result},
                     )
                 )
             )
-            total_tokens_in += estimate_tokens(result_str[:4000])
+            total_tokens_in += estimate_tokens(truncated_result)
 
         # Add function responses to conversation
         contents.append(types.Content(role="user", parts=function_response_parts))
@@ -543,14 +579,26 @@ def call_llm_with_tools(
         # Exhausted all rounds — record warning
         tracer.record(agent_name, "WARNING", f"Hit max tool rounds ({max_tool_rounds})")
 
-    final_text = "\n".join(all_text_parts) if all_text_parts else "[No text response generated]"
-    total_tokens_out = estimate_tokens(final_text)
-
-    return LLMCallResult(
-        text=final_text,
-        model=model,
-        tokens_in=total_tokens_in,
-        tokens_out=total_tokens_out,
-        agent_name=agent_name,
-        success=True,
-    )
+    # AG-M2: Return success=False when no text was generated
+    if all_text_parts:
+        final_text = "\n".join(all_text_parts)
+        total_tokens_out = estimate_tokens(final_text)
+        return LLMCallResult(
+            text=final_text,
+            model=model,
+            tokens_in=total_tokens_in,
+            tokens_out=total_tokens_out,
+            agent_name=agent_name,
+            success=True,
+        )
+    else:
+        final_text = "[No text response generated]"
+        return LLMCallResult(
+            text=final_text,
+            model=model,
+            tokens_in=total_tokens_in,
+            tokens_out=0,
+            agent_name=agent_name,
+            success=False,
+            error="No text output from tool-calling loop",
+        )

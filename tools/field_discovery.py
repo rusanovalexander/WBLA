@@ -49,20 +49,15 @@ def discover_required_fields_prompt(
             cond_section = ""
     else:
         core_section = (
-            "### Core Categories (always include):\n"
-            "1. **DEAL INFORMATION** - Basic transaction details\n"
-            "2. **BORROWER** - Entity information\n"
-            "3. **FINANCIALS** - Key metrics\n"
+            "### Core Categories:\n"
+            "Determine the appropriate information categories based on the deal characteristics above.\n"
+            "Typical categories include deal details, entity information, financial metrics, etc.\n"
+            "but you MUST adapt to what THIS specific deal requires.\n"
         )
         cond_section = (
-            "\n### Conditional Categories (include if applicable):\n"
-            "4. **SPONSOR** - If sponsor-backed transaction\n"
-            "5. **GUARANTOR** - If guarantees mentioned\n"
-            "6. **ASSET** - If asset/collateral-based\n"
-            "7. **SECURITY** - If secured transaction\n"
-            "8. **CONSTRUCTION** - If construction/development deal\n"
-            "9. **ACQUISITION** - If acquisition financing\n"
-            "10. **REFINANCING** - If refinancing transaction\n"
+            "\n### Additional Categories:\n"
+            "Include any additional categories that the deal characteristics suggest are relevant.\n"
+            "Do not use a predetermined list — derive categories from the deal context.\n"
         )
 
     prompt = f"""Analyze this deal and determine which information fields need to be extracted.
@@ -145,15 +140,11 @@ def analyze_deal_characteristics_prompt(
         taxonomy_json = ",\n".join(taxonomy_lines)
     else:
         taxonomy_json = (
-            '  "transaction_type": "new | modification | renewal | refinancing | acquisition",\n'
-            '  "structure": "secured | unsecured | mezzanine | hybrid",\n'
-            '  "asset_class": "as identified from teaser",\n'
-            '  "asset_subtype": "as identified from teaser or N/A",\n'
-            '  "special_features": ["as identified from teaser"],\n'
-            '  "parties": ["as identified from teaser"],\n'
-            '  "jurisdiction": "as identified from teaser",\n'
-            '  "regulatory_context": "as identified from teaser",\n'
-            '  "complexity_indicators": ["as identified from teaser"]'
+            '  "transaction_type": "<as identified from teaser>",\n'
+            '  "structure": "<as identified from teaser>",\n'
+            '  "parties": ["<as identified from teaser>"],\n'
+            '  "jurisdiction": "<as identified from teaser>"\n'
+            '  // Add any other classification dimensions relevant to this specific deal'
         )
 
     prompt = f"""Analyze this teaser and identify the key characteristics of this deal.
@@ -273,8 +264,8 @@ Return a JSON array with all fields:
   {{
     "id": 1,
     "name": "Facility Amount",
-    "value": "EUR 75,000,000",
-    "source_quote": "The facility amount is EUR 75 million...",
+    "value": "[amount in deal currency]",
+    "source_quote": "exact quote from the teaser...",
     "confidence": "HIGH"
   }}
 ]

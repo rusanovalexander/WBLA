@@ -10,12 +10,16 @@ Falls back to in-memory trace log for demo/local use.
 
 from __future__ import annotations
 
+import contextvars
+import logging
 import os
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Generator
+
+logger = logging.getLogger(__name__)
 
 from models.schemas import AgentTraceEntry
 
@@ -93,7 +97,7 @@ class TraceStore:
         entry = AgentTraceEntry(
             agent=agent,
             action=action,
-            detail=detail[:500] if detail else "",
+            detail=detail[:2000] if detail else "",
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             cost_usd=cost_usd,
@@ -125,8 +129,8 @@ class TraceStore:
                     usage={"input": tokens_in, "output": tokens_out},
                     metadata={"cost_usd": cost_usd, "duration_ms": duration_ms},
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Langfuse forwarding failed: %s", e)
 
         return entry
 
@@ -243,15 +247,21 @@ class TraceStore:
 
 
 # =============================================================================
-# Global singleton (used by the Streamlit app via session state)
+# Session-scoped tracer (contextvars prevents cross-session bleed)
 # =============================================================================
 
-_global_tracer: TraceStore | None = None
+_tracer_var: contextvars.ContextVar[TraceStore | None] = contextvars.ContextVar("tracer", default=None)
 
 
 def get_tracer() -> TraceStore:
-    """Get the global tracer instance."""
-    global _global_tracer
-    if _global_tracer is None:
-        _global_tracer = TraceStore()
-    return _global_tracer
+    """Get the context-local tracer instance (session-safe)."""
+    tracer = _tracer_var.get()
+    if tracer is None:
+        tracer = TraceStore()
+        _tracer_var.set(tracer)
+    return tracer
+
+
+def set_tracer(tracer: TraceStore) -> None:
+    """Set the context-local tracer (called from Streamlit session init)."""
+    _tracer_var.set(tracer)

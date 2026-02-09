@@ -70,7 +70,9 @@ def render_sidebar(tracer: TraceStore, handle_chat_fn):
         st.divider()
 
         # ---- Reset ----
-        if st.button("🔄 Reset All", use_container_width=True):
+        # AG-L1: Require confirmation before resetting
+        confirm_reset = st.checkbox("I understand this will delete all progress", key="confirm_reset")
+        if st.button("Reset All", use_container_width=True, disabled=not confirm_reset):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()

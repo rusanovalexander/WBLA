@@ -58,7 +58,16 @@ class PhaseManager:
         """
         if next_phase not in self.PHASES:
             raise ValueError(f"Invalid phase: {next_phase}")
-        
+
+        # AG-M5: Validate transition ordering — no skipping phases
+        current_idx = self.get_phase_index()
+        next_idx = self.PHASES.index(next_phase)
+        if next_idx != current_idx + 1:
+            raise ValueError(
+                f"Cannot skip from {self.current_phase} to {next_phase}. "
+                f"Expected next phase: {self.PHASES[current_idx + 1] if current_idx + 1 < len(self.PHASES) else 'NONE'}"
+            )
+
         # Save current state before advancing
         self.save_phase_state(self.current_phase, state_snapshot)
         

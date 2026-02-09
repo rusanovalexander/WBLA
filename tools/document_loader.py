@@ -5,10 +5,17 @@ Supports:
 - TXT files (primary - for anonymized documents)
 - PDF (with optional OCR via Document AI)
 - DOCX (Word documents)
-- XLSX (Excel spreadsheets)
+- XLSX / XLS (Excel spreadsheets)
+- CSV (comma-separated values)
+- HTML / HTM (web pages)
+- JSON (structured data)
+- PPTX (PowerPoint presentations)
+- Images: PNG, JPG, JPEG (via OCR)
 """
 
 import os
+import re
+import json as json_mod
 from pathlib import Path
 from typing import Dict, Any, List
 import glob
@@ -191,6 +198,78 @@ def load_excel(file_path: str) -> str:
         return f"[EXCEL_ERROR] {e}"
 
 
+def load_csv(file_path: str) -> str:
+    """Extract text from CSV file as a markdown table."""
+    try:
+        import pandas as pd
+
+        df = pd.read_csv(file_path)
+        text = f"## CSV Data: {os.path.basename(file_path)}\n\n"
+        text += df.to_markdown(index=False)
+        text += f"\n\nRows: {len(df)}, Columns: {len(df.columns)}"
+        return text
+    except ImportError:
+        return "[ERROR] pandas not installed"
+    except Exception as e:
+        return f"[CSV_ERROR] {e}"
+
+
+def load_html(file_path: str) -> str:
+    """Extract text from HTML file by stripping tags."""
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            html_content = f.read()
+
+        # Remove script and style blocks
+        cleaned = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+        # Strip remaining tags
+        text = re.sub(r'<[^>]+>', ' ', cleaned)
+        # Collapse whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text if text else "[No text content in HTML]"
+    except Exception as e:
+        return f"[HTML_ERROR] {e}"
+
+
+def load_json(file_path: str) -> str:
+    """Load a JSON file and pretty-print as text."""
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            data = json_mod.load(f)
+
+        return f"## JSON Data: {os.path.basename(file_path)}\n\n```json\n{json_mod.dumps(data, indent=2, ensure_ascii=False)[:100000]}\n```"
+    except Exception as e:
+        return f"[JSON_ERROR] {e}"
+
+
+def load_pptx(file_path: str) -> str:
+    """Extract text from PowerPoint presentation."""
+    try:
+        from pptx import Presentation
+
+        prs = Presentation(file_path)
+        texts = []
+        for i, slide in enumerate(prs.slides, 1):
+            slide_texts = []
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    for paragraph in shape.text_frame.paragraphs:
+                        if paragraph.text.strip():
+                            slide_texts.append(paragraph.text.strip())
+                if hasattr(shape, "table"):
+                    table = shape.table
+                    for row in table.rows:
+                        cells = [cell.text.strip() for cell in row.cells]
+                        slide_texts.append(" | ".join(cells))
+            if slide_texts:
+                texts.append(f"### Slide {i}\n" + "\n".join(slide_texts))
+        return "\n\n".join(texts) if texts else "[No text content in presentation]"
+    except ImportError:
+        return "[ERROR] python-pptx not installed. Run: pip install python-pptx"
+    except Exception as e:
+        return f"[PPTX_ERROR] {e}"
+
+
 # =============================================================================
 # Universal Loader
 # =============================================================================
@@ -233,11 +312,27 @@ def universal_loader(file_path: str, force_ocr: bool = False) -> str:
     # Excel
     elif ext in [".xlsx", ".xls"]:
         return load_excel(file_path)
-    
+
+    # CSV
+    elif ext == ".csv":
+        return load_csv(file_path)
+
+    # HTML
+    elif ext in [".html", ".htm"]:
+        return load_html(file_path)
+
+    # JSON
+    elif ext == ".json":
+        return load_json(file_path)
+
+    # PowerPoint
+    elif ext == ".pptx":
+        return load_pptx(file_path)
+
     # Images (OCR)
     elif ext in [".png", ".jpg", ".jpeg"]:
         return load_pdf_with_docai(file_path)
-    
+
     else:
         return f"[ERROR] Unsupported format: {ext}"
 

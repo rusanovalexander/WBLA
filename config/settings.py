@@ -77,6 +77,15 @@ for _folder in [PROCEDURE_FOLDER, GUIDELINES_FOLDER, EXAMPLES_FOLDER, TEASERS_FO
     _folder.mkdir(parents=True, exist_ok=True)
 
 # =============================================================================
+# RAG Document Type Detection Keywords (configurable)
+# =============================================================================
+
+DOC_TYPE_KEYWORDS = {
+    "Procedure": ["procedure", "assessment", "process", "manual", "instruction", "operating", "methodology"],
+    "Guidelines": ["guideline", "guidance", "lending", "policy", "standard", "framework", "criteria", "rule"],
+}
+
+# =============================================================================
 # Feature Flags
 # =============================================================================
 

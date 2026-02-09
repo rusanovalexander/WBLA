@@ -10,7 +10,7 @@ import logging
 import re
 
 
-from config.settings import PROJECT_ID, SEARCH_LOCATION, DATA_STORE_ID, get_credentials
+from config.settings import PROJECT_ID, SEARCH_LOCATION, DATA_STORE_ID, DOC_TYPE_KEYWORDS, get_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -182,14 +182,16 @@ def search_rag(query: str, num_results: int = 5) -> Dict[str, Any]:
             uri_lower = uri.lower() if uri else ""
             title_lower = title.lower() if title else ""
             # Check URI first (most reliable), then title as fallback
-            if any(w in uri_lower for w in ["procedure", "assessment", "process"]):
-                doc_type = "Procedure"
-            elif any(w in uri_lower for w in ["guideline", "guidance", "lending", "policy"]):
-                doc_type = "Guidelines"
-            elif any(w in title_lower for w in ["procedure", "assessment", "process"]):
-                doc_type = "Procedure"
-            elif any(w in title_lower for w in ["guideline", "guidance", "lending", "policy"]):
-                doc_type = "Guidelines"
+            # Uses configurable DOC_TYPE_KEYWORDS from settings.py
+            for dtype, keywords in DOC_TYPE_KEYWORDS.items():
+                if any(w in uri_lower for w in keywords):
+                    doc_type = dtype
+                    break
+            if doc_type == "Unknown":
+                for dtype, keywords in DOC_TYPE_KEYWORDS.items():
+                    if any(w in title_lower for w in keywords):
+                        doc_type = dtype
+                        break
             
             # Collect content
             content_parts = []

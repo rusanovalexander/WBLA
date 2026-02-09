@@ -23,7 +23,7 @@ import re
 from typing import Any, Callable
 
 from config.settings import MODEL_PRO, MODEL_FLASH, AGENT_MODELS
-from core.llm_client import call_llm, call_llm_with_tools, call_llm_streaming
+from core.llm_client import call_llm, call_llm_with_tools, call_llm_streaming, require_success
 from core.tracing import TraceStore, get_tracer
 from core.parsers import (
     parse_tool_calls,
@@ -37,6 +37,7 @@ from models.schemas import (
     OrchestratorInsights,
     ProcessDecision,
     ProcessDecisionEvidence,
+    ComplianceCheck,
     RiskFlag,
     RiskSeverity,
     SectionDraft,
@@ -144,20 +145,35 @@ def _extract_structured_decision(
     # Try up to 2 times with different temperatures
     for attempt in range(2):
         temperature = 0.0 if attempt == 0 else 0.1
-        
+
         tracer.record("Extraction", "ATTEMPT", f"Attempt {attempt + 1}/2 (temp={temperature})")
-        
+
         result = call_llm(prompt, MODEL_FLASH, temperature, 4000, "Extraction", tracer)
+        # AG-H3: Check LLM success before using output
+        if not result.success:
+            tracer.record("Extraction", "LLM_FAIL", result.error or "Unknown")
+            continue
         parsed = safe_extract_json(result.text, "object")
-        
+
         if parsed and "decision_found" in parsed:
+            # AG-H4: Validate through Pydantic if decision found
             if parsed.get("decision_found"):
+                try:
+                    validated = ProcessDecision.model_validate({
+                        "assessment_approach": parsed.get("assessment_approach", "Unknown"),
+                        "origination_method": parsed.get("origination_method", "Unknown"),
+                        "procedure_section": parsed.get("procedure_section", ""),
+                    })
+                    parsed["assessment_approach"] = validated.assessment_approach
+                    parsed["origination_method"] = validated.origination_method
+                except Exception:
+                    pass  # Keep raw parsed if validation fails
                 tracer.record("Extraction", "SUCCESS", f"Found: {parsed.get('assessment_approach', '?')}")
                 return parsed
             else:
                 tracer.record("Extraction", "NO_DECISION", "Agent did not make clear decision")
                 return parsed
-    
+
     # Both attempts failed
     tracer.record("Extraction", "FAILED", f"Could not extract after 2 attempts. Output length: {len(result.text)}")
     logger.error("Extraction failed. Last output (first 1000 chars): %s", result.text[:1000])
@@ -180,16 +196,28 @@ def _extract_compliance_checks(
     # Try up to 2 times
     for attempt in range(2):
         temperature = 0.0 if attempt == 0 else 0.1
-        
+
         tracer.record("Extraction", "ATTEMPT", f"Attempt {attempt + 1}/2 (temp={temperature})")
-        
+
         result = call_llm(prompt, MODEL_FLASH, temperature, 6000, "Extraction", tracer)
+        # AG-H3: Check LLM success before using output
+        if not result.success:
+            tracer.record("Extraction", "LLM_FAIL", result.error or "Unknown")
+            continue
         parsed = safe_extract_json(result.text, "array")
-        
+
         if parsed is not None and isinstance(parsed, list):
-            tracer.record("Extraction", "SUCCESS", f"Extracted {len(parsed)} checks")
-            return parsed
-    
+            # AG-H4: Validate each check through Pydantic
+            validated_checks = []
+            for check_data in parsed:
+                try:
+                    validated = ComplianceCheck.model_validate(check_data)
+                    validated_checks.append(validated.model_dump())
+                except Exception:
+                    validated_checks.append(check_data)  # Keep raw if validation fails
+            tracer.record("Extraction", "SUCCESS", f"Extracted {len(validated_checks)} checks")
+            return validated_checks
+
     # Both attempts failed
     tracer.record("Extraction", "FAILED", "Could not extract checks after 2 attempts")
     logger.error("Compliance extraction failed. Last output (first 1000 chars): %s", result.text[:1000])
@@ -537,14 +565,20 @@ def discover_requirements(
             f"what information must be provided for {om} origination",
         ]
         rag_results: dict[str, Any] = {}
+        rag_failures = 0
         for query in rag_queries:
             tracer.record("RequirementsDiscovery", "RAG_SEARCH", f"Procedure: {query[:60]}")
             try:
                 rag_results[query] = search_procedure_fn(query, 3)
             except Exception as e:
+                rag_failures += 1
                 logger.warning("Requirements RAG query failed: %s", e)
         if rag_results:
             procedure_rag_context = format_rag_results(rag_results)
+        # AG-M7: Warn if ALL RAG queries failed
+        if rag_failures == len(rag_queries):
+            procedure_rag_context += "\n\nWARNING: All RAG searches failed. Results may not be grounded in governance documents."
+            tracer.record("RequirementsDiscovery", "RAG_ALL_FAILED", f"All {rag_failures} queries failed")
 
     # --- Inject governance-discovered categories if available ---
     governance_categories = ""
@@ -631,7 +665,7 @@ def run_agentic_compliance(
     if governance_context and governance_context.get("compliance_framework"):
         compliance_criteria_hint = ", ".join(governance_context["compliance_framework"])
     else:
-        compliance_criteria_hint = "financial ratios, security requirements, sponsor criteria, concentration limits, anything else the Guidelines require"
+        compliance_criteria_hint = "all applicable compliance criteria from the Guidelines"
 
     filled_data = "\n".join([
         f"**{r['name']}:** {r['value']}"
@@ -689,7 +723,7 @@ def _run_compliance_native(
     )
 
     ca_instr = instruction or COMPLIANCE_ADVISOR_INSTRUCTION
-    criteria_hint = compliance_criteria_hint or "financial ratios, security requirements, sponsor criteria, concentration limits, anything else the Guidelines require"
+    criteria_hint = compliance_criteria_hint or "all applicable compliance criteria from the Guidelines"
 
     prompt = f"""{ca_instr}
 
@@ -850,7 +884,7 @@ ROUTING RULES:
 - If ANY risk flag is HIGH severity → set requires_human_review: true
 - If critical data is missing → set can_proceed: false with block_reason
 - If compliance has FAIL status → set can_proceed: false
-- suggested_additional_steps can include: "additional_compliance_check", "escalation_review", "data_verification", "re_analysis"
+- suggested_additional_steps: list any relevant follow-up actions based on the analysis (e.g., additional checks, verification, escalation)
 
 ## OUTPUT FORMAT
 
@@ -949,10 +983,11 @@ def run_orchestrator_decision(
         insights.suggested_additional_steps = routing_decisions.get("suggested_additional_steps", [])
         insights.block_reason = routing_decisions.get("block_reason", "")
     else:
-        insights.can_proceed = True
+        # AG-M3: Default-block on parse failure (conservative)
+        insights.can_proceed = False
         insights.requires_human_review = True
-        insights.message_to_human = "Could not parse orchestrator routing — please review manually."
-        tracer.record("Orchestrator", "PARSE_FAIL", "Could not extract routing decisions")
+        insights.message_to_human = "Orchestrator analysis could not be parsed — manual review required before proceeding."
+        tracer.record("Orchestrator", "PARSE_FAIL", "Could not extract routing decisions — blocked by default")
 
     tracer.record(
         "Orchestrator", "DECISION_COMPLETE",
@@ -995,14 +1030,20 @@ def generate_section_structure(
             f"section requirements {aa} assessment approach",
         ]
         rag_results: dict[str, Any] = {}
+        rag_failures = 0
         for query in rag_queries:
             tracer.record("StructureGen", "RAG_SEARCH", f"Procedure: {query[:60]}")
             try:
                 rag_results[query] = search_procedure_fn(query, 3)
             except Exception as e:
+                rag_failures += 1
                 logger.warning("Structure RAG query failed: %s", e)
         if rag_results:
             procedure_sections_context = format_rag_results(rag_results)
+        # AG-M7: Warn if ALL RAG queries failed
+        if rag_failures == len(rag_queries):
+            procedure_sections_context += "\n\nWARNING: All RAG searches failed. Section structure may not match governance requirements."
+            tracer.record("StructureGen", "RAG_ALL_FAILED", f"All {rag_failures} queries failed")
 
     # --- Inject governance-discovered section templates if available ---
     gov_sections_str = ""
@@ -1307,7 +1348,7 @@ def create_process_decision(
 
     deal_size = "Unknown"
     matches = re.findall(
-        r"(?:EUR|€|USD|\$)\s*[\d,\.]+\s*(?:million|M|billion|B)?",
+        r"(?:EUR|€|USD|\$|GBP|£|CHF|JPY|¥|AUD|CAD|SGD|HKD|SEK|NOK|DKK|PLN|CZK|AED|SAR|[A-Z]{3})\s*[\d,\.]+\s*(?:million|mln|M|billion|bln|B|thousand|K)?",
         extracted_data,
         re.IGNORECASE,
     )

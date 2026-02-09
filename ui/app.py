@@ -45,7 +45,7 @@ from agents import (
     create_process_analyst_responder,
     create_compliance_advisor_responder,
 )
-from core.tracing import TraceStore
+from core.tracing import TraceStore, set_tracer
 from core.llm_client import call_llm, call_llm_streaming, call_llm_with_backoff
 from core.orchestration import (
     run_agentic_analysis,
@@ -134,6 +134,8 @@ def init_state():
         st.session_state.phase_manager = PhaseManager()
     if st.session_state.tracer is None:
         st.session_state.tracer = TraceStore()
+    # AG-H2: Bind session tracer to contextvars so core modules use it
+    set_tracer(st.session_state.tracer)
 
 init_state()
 
@@ -159,8 +161,9 @@ def _advance_phase(next_phase: str):
     }
     try:
         pm.advance_to(next_phase, snapshot)
+        st.session_state.workflow_phase = next_phase  # ONLY on success
     except ValueError as e:
-        # AG-5: Log validation failures instead of silently suppressing
+        # AG-H1: Log validation failures and BLOCK the transition
         change_log = st.session_state.get("change_log")
         if change_log:
             change_log.record_change(
@@ -169,7 +172,8 @@ def _advance_phase(next_phase: str):
                 next_phase,
                 f"PhaseManager validation failed: {e}",
             )
-    st.session_state.workflow_phase = next_phase
+        st.error(f"Phase transition blocked: {e}")
+        return  # Do NOT advance
 
 
 # =============================================================================
@@ -273,7 +277,7 @@ def render_phase_setup():
 
     uploaded = st.file_uploader(
         "Upload additional documents",
-        type=["pdf", "docx", "txt", "xlsx"],
+        type=["pdf", "docx", "txt", "xlsx", "xls", "csv", "png", "jpg", "html", "htm", "json", "pptx"],
         accept_multiple_files=True,
     )
     if uploaded:
@@ -558,7 +562,7 @@ def render_phase_process_gaps():
             )
             bulk_files = st.file_uploader(
                 "Upload documents:",
-                type=["pdf", "docx", "xlsx", "xls", "txt", "csv", "png", "jpg"],
+                type=["pdf", "docx", "xlsx", "xls", "txt", "csv", "png", "jpg", "html", "htm", "json", "pptx"],
                 accept_multiple_files=True,
                 key="bulk_upload_phase2",
             )
@@ -684,10 +688,10 @@ def render_phase_process_gaps():
                                             st.warning("Could not find this value in the teaser or analysis.")
 
                             elif input_mode == "📁 Upload File":
-                                st.caption("Upload a document (PDF, DOCX, XLSX, TXT) — the agent will extract the relevant value")
+                                st.caption("Upload a document (PDF, DOCX, XLSX, TXT, CSV, HTML, JSON, PPTX) — the agent will extract the relevant value")
                                 uploaded = st.file_uploader(
                                     "Upload file:",
-                                    type=["pdf", "docx", "xlsx", "xls", "txt", "csv", "png", "jpg"],
+                                    type=["pdf", "docx", "xlsx", "xls", "txt", "csv", "png", "jpg", "html", "htm", "json", "pptx"],
                                     key=f"upload_{global_idx}",
                                     label_visibility="collapsed",
                                 )
@@ -827,8 +831,8 @@ Return ONLY valid JSON between XML tags, with NO other text:
 
 <json_output>
 [
-  {{"id": 1, "value": "EUR 75,000,000", "source_quote": "Senior secured facility of EUR 75,000,000..."}},
-  {{"id": 2, "value": "ABC Holdings Ltd", "source_quote": "The Borrower, ABC Holdings Ltd, is a..."}}
+  {{"id": 1, "value": "[amount in deal currency]", "source_quote": "exact quote from teaser..."}},
+  {{"id": 2, "value": "[entity name]", "source_quote": "exact quote from teaser..."}}
 ]
 </json_output>
 
@@ -1694,9 +1698,37 @@ def render_phase_drafting():
 
     st.divider()
     if structure and len(drafts) >= len(structure):
-        if st.button("➡️ Continue to Export", type="primary", use_container_width=True):
-            _advance_phase("COMPLETE")
-            st.rerun()
+        # AG-M8: Run Orchestrator routing check before allowing completion
+        if "drafting_routing_done" not in st.session_state:
+            if st.button("Run Final Review", type="secondary", use_container_width=True):
+                with st.spinner("Running orchestrator final review..."):
+                    tracer = get_tracer()
+                    insights = run_orchestrator_decision(
+                        "DRAFTING",
+                        st.session_state.extracted_data or "",
+                        st.session_state.compliance_result or "",
+                        st.session_state.process_path or "",
+                        tracer=tracer,
+                        governance_context=st.session_state.get("governance_context"),
+                    )
+                    st.session_state["drafting_routing"] = insights
+                    st.session_state["drafting_routing_done"] = True
+                    st.rerun()
+        else:
+            routing = st.session_state.get("drafting_routing")
+            if routing and routing.message_to_human:
+                st.info(f"Orchestrator: {routing.message_to_human}")
+            if routing and routing.flags:
+                for flag in routing.flags:
+                    st.warning(f"{flag.severity.value}: {flag.description}")
+            can_export = True
+            if routing and not routing.can_proceed:
+                st.warning("Orchestrator recommends review before export.")
+                can_export = st.checkbox("I have reviewed the drafts and wish to proceed", key="drafting_override")
+            if can_export:
+                if st.button("➡️ Continue to Export", type="primary", use_container_width=True):
+                    _advance_phase("COMPLETE")
+                    st.rerun()
 
 
 # =============================================================================
