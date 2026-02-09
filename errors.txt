@@ -1,0 +1,80 @@
+All JSON parse attempts failed. Last error: Expecting ',' delimiter: line 3 column 12 (char 17). JSON string (first 300 chars): [
+  {
+    "id": 4]}
+Could not parse JSON from LLM output (539 chars). First 500 chars:
+<json_output>
+[
+  {
+    "id": 4,
+    "value": "Manager: DRZ Real Estate (\"DRZ Real Estate\"), the global private real estate investment management arm of De Ruyter & Zonen Capital.\nExperience: 35+ years of real estate investing experience.\nAUM: $46Bn Current Global Real Estate AUM (as of August 31, 2025).\nTeam: 220+ dedicated professionals.\nGlobal Reach: 19 offices across 14 countries.\nPortfolio Examples: Prague Central Station Mall, Vltava Tower Shops (Prague), Oslo East Shopping Centre (
+[...]
+Last 200 chars:
+ionals.\nGlobal Reach: 19 offices across 14 countries.\nPortfolio Examples: Prague Central Station Mall, Vltava Tower Shops (Prague), Oslo East Shopping Centre (Oslo).\nStrategy Mix: Core/Core-Plus (8
+LLM call failed for AISuggest: 499 CANCELLED. {'error': {'code': 499, 'message': 'The operation was cancelled.', 'status': 'CANCELLED'}}
+Traceback (most recent call last):
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-main\core\llm_client.py", line 150, in call_llm
+    response = _call_gemini(
+               ^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 338, in wrapped_f
+    return copy(f, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 477, in __call__
+    do = self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 378, in iter
+    result = action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 400, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 480, in __call__
+    result = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-main\core\llm_client.py", line 115, in _call_gemini
+    response = client.models.generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\models.py", line 5227, in generate_content
+    response = self._generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\models.py", line 4009, in _generate_content
+    response = self._api_client.request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 1386, in request
+    response = self._request(http_request, http_options, stream=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 1222, in _request
+    return self._retry(self._request_once, http_request, stream)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 477, in __call__
+    do = self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 378, in iter
+    result = action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 420, in exc_check
+    raise retry_exc.reraise()
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 187, in reraise
+    raise self.last_attempt.result()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 480, in __call__
+    result = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 1199, in _request_once
+    errors.APIError.raise_for_response(response)
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\errors.py", line 121, in raise_for_response
+    cls.raise_error(response.status_code, response_json, response)
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\errors.py", line 146, in raise_error
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 499 CANCELLED. {'error': {'code': 499, 'message': 'The operation was cancelled.', 'status': 'CANCELLED'}}
+Native compliance tools failed: 'NoneType' object is not iterable
