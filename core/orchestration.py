@@ -472,13 +472,23 @@ Analyze this teaser document completely.
 {teaser_text}
 </TEASER_DOCUMENT>
 
-## INSTRUCTIONS
+## CRITICAL INSTRUCTIONS — READ BEFORE RESPONDING
 
-1. Read the teaser carefully
-2. Use the search_procedure tool to look up relevant Procedure sections
-3. Produce your FULL analysis following the OUTPUT_STRUCTURE
+**YOU MUST SEARCH THE PROCEDURE DOCUMENT BEFORE PRODUCING YOUR ANALYSIS.**
 
-Be thorough. Search the Procedure for thresholds and requirements before making your determination.
+Do NOT write your analysis first. Instead:
+1. FIRST, call the search_procedure tool AT LEAST 3 TIMES to find relevant rules, thresholds, and requirements
+2. Read the search results carefully
+3. THEN AND ONLY THEN produce your full analysis with the search results incorporated
+
+If you produce an analysis without calling search_procedure first, your analysis will be REJECTED.
+
+Suggested initial searches:
+- search_procedure("assessment approach criteria thresholds")
+- search_procedure("origination methods document types")
+- search_procedure("proportionality criteria deal size")
+
+After searching, produce your FULL analysis following the OUTPUT_STRUCTURE.
 """
 
     result = call_llm_with_tools(
@@ -487,9 +497,9 @@ Be thorough. Search the Procedure for thresholds and requirements before making 
         tool_executor=executor,
         model=AGENT_MODELS.get("process_analyst", MODEL_PRO),
         temperature=0.0,
-        max_tokens=16384,
+        max_tokens=32000,
         agent_name="ProcessAnalyst",
-        max_tool_rounds=5,
+        max_tool_rounds=8,
         tracer=tracer,
     )
 
@@ -901,13 +911,18 @@ def _run_compliance_native(
 ### Teaser:
 {teaser_text}
 
-## YOUR TASK
+## CRITICAL INSTRUCTIONS — READ BEFORE RESPONDING
 
-Perform a complete compliance assessment:
-1. Use the search_guidelines tool to look up EVERY applicable limit
-2. Check the deal against each limit you find
-3. Include ALL relevant criteria — {criteria_hint}
-4. You MUST search before making determinations — do not rely on general knowledge
+**YOU MUST SEARCH THE GUIDELINES DOCUMENT BEFORE PRODUCING YOUR ASSESSMENT.**
+
+Do NOT write your assessment first. Instead:
+1. FIRST, call the search_guidelines tool AT LEAST 3 TIMES to find applicable limits and criteria
+2. Read the search results carefully
+3. THEN AND ONLY THEN produce your full compliance assessment
+
+If you produce an assessment without calling search_guidelines first, it will be REJECTED.
+
+Criteria to check: {criteria_hint}
 
 Follow the OUTPUT_STRUCTURE from your instructions.
 """
