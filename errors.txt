@@ -1,86 +1,44 @@
-[22:19:32] 🐍 Python dependencies were installed from /mount/src/wbla/requirements.txt using uv.
-
-[22:19:32] 📦 WARN: More than one requirements file detected in the repository. Available options: uv /mount/src/wbla/requirements.txt, poetry /mount/src/wbla/pyproject.toml. Used: uv with /mount/src/wbla/requirements.txt
-
-Check if streamlit is installed
-
-Streamlit is already installed
-
-[22:19:33] 📦 Processed dependencies!
+22:38:03] 📦 Processed dependencies!
 
 
 
 
-────────────────────── Traceback (most recent call last) ───────────────────────
+Pydantic validation failed for ComplianceCheck: 1 validation error for ComplianceCheck
 
-  /home/adminuser/venv/lib/python3.13/site-packages/streamlit/runtime/scriptru  
+reference
 
-  nner/exec_code.py:129 in exec_func_with_error_handling                        
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
 
-                                                                                
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
 
-  /home/adminuser/venv/lib/python3.13/site-packages/streamlit/runtime/scriptru  
+Pydantic validation failed for ComplianceCheck: 1 validation error for ComplianceCheck
 
-  nner/script_runner.py:689 in code_to_exec                                     
+reference
 
-                                                                                
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
 
-  /mount/src/wbla/ui/app.py:1947 in <module>                                    
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
 
-                                                                                
+Pydantic validation failed for ComplianceCheck: 1 validation error for ComplianceCheck
 
-    1944                                                                        
+reference
 
-    1945                                                                        
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
 
-    1946 if __name__ == "__main__":                                             
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
 
-  ❱ 1947 │   main()                                                             
+Pydantic validation failed for ComplianceCheck: 1 validation error for ComplianceCheck
 
-    1948                                                                        
+reference
 
-                                                                                
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
 
-  /mount/src/wbla/ui/app.py:1939 in main                                        
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
 
-                                                                                
+Pydantic validation failed for ComplianceCheck: 1 validation error for ComplianceCheck
 
-    1936 │   elif phase == "COMPLIANCE":                                        
+reference
 
-    1937 │   │   render_phase_compliance()                                      
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
 
-    1938 │   elif phase == "DRAFTING":                                          
-
-  ❱ 1939 │   │   render_phase_drafting()                                        
-
-    1940 │   elif phase == "COMPLETE":                                          
-
-    1941 │   │   render_phase_complete()                                        
-
-    1942 │   else:                                                              
-
-                                                                                
-
-  /mount/src/wbla/ui/app.py:1712 in render_phase_drafting                       
-
-                                                                                
-
-    1709 │   │   st.progress(len(drafts) / max(len(structure), 1))              
-
-    1710 │   │                                                                  
-
-    1711 │   │   # Draft All button                                             
-
-  ❱ 1712 │   │   undrafted = [s for s in structure if s.get("name", f"Section_  
-
-    1713 │   │   if undrafted:                                                  
-
-    1714 │   │   │   if st.button(                                              
-
-    1715 │   │   │   │   f"✍️ Draft All Remaining ({len(undrafted)} sections)"  
-
-────────────────────────────────────────────────────────────────────────────────
-
-UnboundLocalError: cannot access local variable 'i' where it is not associated 
-
-with a value
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
