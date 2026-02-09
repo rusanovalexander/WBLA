@@ -156,7 +156,7 @@ MAX_CONTEXT_TOKENS = 100_000
 # 4096 = standard thinking (agent analysis, drafting)
 # None = model default (no ThinkingConfig set)
 
-THINKING_BUDGET_NONE = 0       # Extraction, JSON parsing, auto-fill
+THINKING_BUDGET_NONE = 300       # Extraction, JSON parsing, auto-fill
 THINKING_BUDGET_LIGHT = 2048   # Tool loops, routing, planning
 THINKING_BUDGET_STANDARD = 4096  # Agent analysis, compliance, drafting
 
