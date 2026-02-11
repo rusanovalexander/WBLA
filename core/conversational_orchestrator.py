@@ -20,7 +20,7 @@ from agents import (
 )
 from core.governance_discovery import run_governance_discovery
 from core.llm_client import call_llm
-from tools.rag_search import search_procedure_documents, search_guidelines_documents
+from tools.rag_search import tool_search_procedure, tool_search_guidelines
 from config.settings import MODEL_PRO
 from core.trace_store import get_tracer, TraceStore
 
@@ -116,24 +116,17 @@ class ConversationalOrchestrator:
     def _rag_search_guidelines(self, query: str, num_results: int = 3) -> dict:
         """RAG search wrapper for compliance advisor responder."""
         try:
-            results_text = search_guidelines_documents(query, top_k=num_results)
-            # Parse results into structured format
-            return {
-                "status": "OK",
-                "results": [
-                    {"title": "Guidelines", "content": results_text}
-                ]
-            }
+            return tool_search_guidelines(query, num_results=num_results)
         except Exception as e:
             return {"status": "ERROR", "results": []}
 
-    def search_procedure(self, query: str, top_k: int = 3) -> str:
+    def search_procedure(self, query: str, top_k: int = 3):
         """Search procedure documents."""
-        return search_procedure_documents(query, top_k=top_k)
+        return tool_search_procedure(query, num_results=top_k)
 
-    def search_guidelines(self, query: str, top_k: int = 3) -> str:
+    def search_guidelines(self, query: str, top_k: int = 3):
         """Search guidelines documents."""
-        return search_guidelines_documents(query, top_k=top_k)
+        return tool_search_guidelines(query, num_results=top_k)
 
     def get_governance_context(self) -> dict[str, Any]:
         """Get current governance context."""
