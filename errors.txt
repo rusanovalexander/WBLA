@@ -1,44 +1,30 @@
-22:38:03] 📦 Processed dependencies!
+────────────────────────── Traceback (most recent call last) ───────────────────────────
+  C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\streamlit\runtime\scr
+  iptrunner\exec_code.py:129 in exec_func_with_error_handling
 
+  C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\streamlit\runtime\scr
+  iptrunner\script_runner.py:672 in code_to_exec
 
+  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
+  Omni\WBLA-feature-ui-refactor-and-tracing_v1\ui\app.py:52 in <module>
 
+     49 │   create_process_analyst_responder,
+     50 │   create_compliance_advisor_responder,
+     51 )
+  ❱  52 from core.tracing import TraceStore, set_tracer
+     53 from core.llm_client import call_llm, call_llm_streaming, call_llm_with_backof
+     54 from core.orchestration import (
+     55 │   run_agentic_analysis,
 
-Pydantic validation failed for ComplianceCheck: 1 validation error for ComplianceCheck
+  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
+  Omni\WBLA-feature-ui-refactor-and-tracing_v1\core\tracing\__init__.py:9 in <module>
 
-reference
-
-  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
-
-    For further information visit https://errors.pydantic.dev/2.12/v/string_type
-
-Pydantic validation failed for ComplianceCheck: 1 validation error for ComplianceCheck
-
-reference
-
-  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
-
-    For further information visit https://errors.pydantic.dev/2.12/v/string_type
-
-Pydantic validation failed for ComplianceCheck: 1 validation error for ComplianceCheck
-
-reference
-
-  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
-
-    For further information visit https://errors.pydantic.dev/2.12/v/string_type
-
-Pydantic validation failed for ComplianceCheck: 1 validation error for ComplianceCheck
-
-reference
-
-  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
-
-    For further information visit https://errors.pydantic.dev/2.12/v/string_type
-
-Pydantic validation failed for ComplianceCheck: 1 validation error for ComplianceCheck
-
-reference
-
-  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
-
-    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+     6 - VertexTraceManager: Persistent Vertex AI Trace integration (new)
+     7 """
+     8
+  ❱  9 from .trace_store import TraceStore, set_tracer, get_tracer
+    10
+    11 # Import Vertex AI tracing only if available
+    12 try:
+────────────────────────────────────────────────────────────────────────────────────────
+ModuleNotFoundError: No module named 'core.tracing.trace_store'
