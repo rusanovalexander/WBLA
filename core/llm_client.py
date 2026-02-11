@@ -19,6 +19,7 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
+    before_sleep_log,
 )
 
 from config.settings import (
@@ -106,8 +107,9 @@ def _is_retryable(exception: BaseException) -> bool:
 
 @retry(
     retry=_is_retryable,
-    stop=stop_after_attempt(4),
-    wait=wait_exponential(multiplier=2, min=4, max=60),
+    stop=stop_after_attempt(10),  # Increased from 4 to 10 for rate limits
+    wait=wait_exponential(multiplier=2, min=4, max=120),  # Increased max wait from 60s to 120s
+    before_sleep=before_sleep_log(logger, logging.WARNING),  # Log retry attempts
     reraise=True,
 )
 def _call_gemini(
@@ -376,8 +378,9 @@ def call_llm_with_backoff(
 
 @retry(
     retry=_is_retryable,
-    stop=stop_after_attempt(4),
-    wait=wait_exponential(multiplier=2, min=4, max=60),
+    stop=stop_after_attempt(10),  # Increased from 4 to 10 for rate limits
+    wait=wait_exponential(multiplier=2, min=4, max=120),  # Increased max wait from 60s to 120s
+    before_sleep=before_sleep_log(logger, logging.WARNING),  # Log retry attempts
     reraise=True,
 )
 def _call_gemini_streaming(
