@@ -1,31 +1,186 @@
-────────────────────────── Traceback (most recent call last) ───────────────────────────
-  C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\streamlit\runtime\scr
-  iptrunner\exec_code.py:129 in exec_func_with_error_handling
+C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-autonomous-agents_v5>python main.py
+============================================================
+Credit Pack Multi-Agent PoC v3.2.0
+============================================================
 
-  C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\streamlit\runtime\scr
-  iptrunner\script_runner.py:672 in code_to_exec
+📋 Configuration:
+  ✅ project_id
+  ✅ credentials
+  ✅ data_store
+  ✅ docai_processor
 
-  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-autonomous-agents_v3\ui\chat_app.py:18 in <module>
+  Project ID: gen-lang-client-0861988411
+  Data Store: omnia-policy-ds
 
-     15 # Add parent directory to path
-     16 sys.path.insert(0, str(Path(__file__).parent.parent))
-     17
-  ❱  18 from core.conversational_orchestrator import ConversationalOrchestrator
-     19
-     20
-     21 def init_session_state():
+🔗 RAG Connection:
+  ✅ Connected to omnia-policy-ds
+  Sample doc: Procedure_anon
 
-  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-autonomous-agents_v3\core\conversational_orchestrator.py:25 in
-  <module>
+📁 Documents:
+  teasers: 1 file(s)
+    - Teaser_anon.txt
+  examples: 1 file(s)
+    - Example_anon.txt
+  procedure: 1 file(s)
+    - Procedure_anon.txt
+  guidelines: 1 file(s)
+    - Guidelines_anon.txt
 
-     22 from core.llm_client import call_llm
-     23 from tools.rag_search import tool_search_procedure, tool_search_guidelines
-     24 from config.settings import MODEL_PRO
-  ❱  25 from core.trace_store import get_tracer, TraceStore
-     26
-     27
-     28 class ConversationalOrchestrator:
-────────────────────────────────────────────────────────────────────────────────────────
-ModuleNotFoundError: No module named 'core.trace_store'
+============================================================
+To start the UI:
+  streamlit run ui/app.py
+============================================================
+
+C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-autonomous-agents_v5>python -m streamlit run ui/chat_app.py
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://192.168.178.157:8501
+  External URL: http://178.84.61.238:8501
+
+Governance discovery: no RAG results from either document
+Tool call round 1 failed: Your default credentials were not found. To set up Application Default Credentials, see https://cloud.google.com/docs/authentication/external/set-up-adc for more information.
+Traceback (most recent call last):
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-autonomous-agents_v5\core\llm_client.py", line 602, in call_llm_with_tools
+    response = _call_gemini(
+               ^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 338, in wrapped_f
+    return copy(f, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 477, in __call__
+    do = self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 378, in iter
+    result = action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 400, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 480, in __call__
+    result = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-autonomous-agents_v5\core\llm_client.py", line 156, in _call_gemini
+    response = client.models.generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\models.py", line 5212, in generate_content
+    return self._generate_content(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\models.py", line 4009, in _generate_content
+    response = self._api_client.request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 1386, in request
+    response = self._request(http_request, http_options, stream=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 1222, in _request
+    return self._retry(self._request_once, http_request, stream)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 477, in __call__
+    do = self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 378, in iter
+    result = action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 420, in exc_check
+    raise retry_exc.reraise()
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 187, in reraise
+    raise self.last_attempt.result()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 480, in __call__
+    result = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 1165, in _request_once
+    http_request.headers['Authorization'] = f'Bearer {self._access_token()}'
+                                                      ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 993, in _access_token
+    self._credentials, project = load_auth(project=self.project)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 191, in load_auth
+    credentials, loaded_project_id = google.auth.default(  # type: ignore[no-untyped-call]
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\auth\_default.py", line 752, in default
+    raise exceptions.DefaultCredentialsError(_CLOUD_SDK_MISSING_CREDENTIALS)
+google.auth.exceptions.DefaultCredentialsError: Your default credentials were not found. To set up Application Default Credentials, see https://cloud.google.com/docs/authentication/external/set-up-adc for more information.
+LLM call failed for ProcessAnalyst: Your default credentials were not found. To set up Application Default Credentials, see https://cloud.google.com/docs/authentication/external/set-up-adc for more information.
+Traceback (most recent call last):
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-autonomous-agents_v5\core\llm_client.py", line 210, in call_llm
+    response = _call_gemini(
+               ^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 338, in wrapped_f
+    return copy(f, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 477, in __call__
+    do = self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 378, in iter
+    result = action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 400, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 480, in __call__
+    result = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-autonomous-agents_v5\core\llm_client.py", line 156, in _call_gemini
+    response = client.models.generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\models.py", line 5227, in generate_content
+    response = self._generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\models.py", line 4009, in _generate_content
+    response = self._api_client.request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 1386, in request
+    response = self._request(http_request, http_options, stream=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 1222, in _request
+    return self._retry(self._request_once, http_request, stream)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 477, in __call__
+    do = self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 378, in iter
+    result = action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 420, in exc_check
+    raise retry_exc.reraise()
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 187, in reraise
+    raise self.last_attempt.result()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 480, in __call__
+    result = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 1165, in _request_once
+    http_request.headers['Authorization'] = f'Bearer {self._access_token()}'
+                                                      ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 993, in _access_token
+    self._credentials, project = load_auth(project=self.project)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 191, in load_auth
+    credentials, loaded_project_id = google.auth.default(  # type: ignore[no-untyped-call]
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\auth\_default.py", line 752, in default
+    raise exceptions.DefaultCredentialsError(_CLOUD_SDK_MISSING_CREDENTIALS)
+google.auth.exceptions.DefaultCredentialsError: Your default credentials were not found. To set up Application Default Credentials, see https://cloud.google.com/docs/authentication/external/set-up-adc for more information.
