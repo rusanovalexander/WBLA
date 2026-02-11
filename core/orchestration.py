@@ -834,7 +834,8 @@ def discover_requirements(
 
 
 # =============================================================================
-# Phase 3: Agentic Compliance
+# =============================================================================
+# Phase 3: Agentic Compliance (CLASS-BASED)
 # =============================================================================
 
 def run_agentic_compliance(
@@ -847,233 +848,34 @@ def run_agentic_compliance(
     governance_context: dict[str, Any] | None = None,
 ) -> tuple[str, list[dict]]:
     """
-    Agentic compliance — Compliance Advisor autonomously searches Guidelines.
+    Agentic compliance — uses ComplianceAdvisor class.
+
+    This is a backward-compatible wrapper that instantiates the ComplianceAdvisor
+    class and delegates to its assess_compliance() method.
 
     The agent decides which criteria to check based on the deal.
     Structured extraction then pulls out ALL criteria it assessed.
     """
+    from agents.compliance_advisor import ComplianceAdvisor
+
     if tracer is None:
         tracer = get_tracer()
 
-    tracer.record("ComplianceAdvisor", "START", "Beginning agentic compliance check")
-
-    # Build governance-aware instruction
-    ca_instruction = get_compliance_advisor_instruction(governance_context)
-
-    # Build compliance criteria hint from governance context (M7)
-    if governance_context and governance_context.get("compliance_framework"):
-        compliance_criteria_hint = ", ".join(governance_context["compliance_framework"])
-    else:
-        compliance_criteria_hint = "all applicable compliance criteria from the Guidelines"
-
-    filled_data = "\n".join([
-        f"**{r['name']}:** {r['value']}"
-        for r in requirements if r.get("status") == "filled"
-    ])
-
-    if use_native_tools:
-        try:
-            result_text = _run_compliance_native(
-                filled_data, teaser_text, extracted_data,
-                search_guidelines_fn, tracer, ca_instruction, compliance_criteria_hint,
-                governance_context
-            )
-        except Exception as e:
-            logger.warning("Native compliance tools failed: %s", e)
-            tracer.record("ComplianceAdvisor", "FALLBACK", str(e))
-            result_text = _run_compliance_text_based(
-                filled_data, teaser_text, extracted_data,
-                search_guidelines_fn, tracer, ca_instruction, compliance_criteria_hint
-            )
-    else:
-        result_text = _run_compliance_text_based(
-            filled_data, teaser_text, extracted_data,
-            search_guidelines_fn, tracer, ca_instruction, compliance_criteria_hint
-        )
-
-    # Dynamic extraction — captures ALL criteria the agent checked
-    checks = _extract_compliance_checks(result_text, tracer)
-
-    tracer.record("ComplianceAdvisor", "COMPLETE", f"Checks extracted: {len(checks)}")
-    return result_text, checks
-
-
-def _run_compliance_native(
-    filled_data: str,
-    teaser_text: str,
-    extracted_data: str,
-    search_guidelines_fn: Callable,
-    tracer: TraceStore,
-    instruction: str = "",
-    compliance_criteria_hint: str = "",
-    governance_context: dict[str, Any] | None = None,
-) -> str:
-    """Compliance using native function calling. Returns raw analysis text."""
-    from tools.function_declarations import get_agent_tools, create_tool_executor
-
-    tools = get_agent_tools("ComplianceAdvisor", governance_context=governance_context)
-    if not tools:
-        raise RuntimeError("No native tool declarations available")
-
-    executor = create_tool_executor(
-        search_procedure_fn=lambda q, n=3: {"status": "ERROR", "results": []},
+    # Instantiate ComplianceAdvisor with governance context
+    advisor = ComplianceAdvisor(
         search_guidelines_fn=search_guidelines_fn,
-        search_rag_fn=lambda q, n=3: {"status": "ERROR", "results": []},
-    )
-
-    ca_instr = instruction or COMPLIANCE_ADVISOR_INSTRUCTION
-    criteria_hint = compliance_criteria_hint or "all applicable compliance criteria from the Guidelines"
-
-    prompt = f"""{ca_instr}
-
-## DEAL DATA
-
-### Filled Requirements:
-{filled_data}
-
-### Extracted Analysis:
-{extracted_data}
-
-### Teaser:
-{teaser_text}
-
-## CRITICAL INSTRUCTIONS — READ BEFORE RESPONDING
-
-**YOU MUST SEARCH THE GUIDELINES DOCUMENT BEFORE PRODUCING YOUR ASSESSMENT.**
-
-Do NOT write your assessment first. Instead:
-1. FIRST, call the search_guidelines tool AT LEAST 3 TIMES to find applicable limits and criteria
-2. Read the search results carefully
-3. THEN AND ONLY THEN produce your full compliance assessment
-
-If you produce an assessment without calling search_guidelines first, it will be REJECTED.
-
-Criteria to check: {criteria_hint}
-
-Follow the OUTPUT_STRUCTURE from your instructions.
-"""
-
-    result = call_llm_with_tools(
-        prompt=prompt,
-        tools=tools,
-        tool_executor=executor,
-        model=AGENT_MODELS.get("compliance_advisor", MODEL_PRO),
-        temperature=0.0,
-        max_tokens=32000,
-        agent_name="ComplianceAdvisor",
-        max_tool_rounds=8,
+        governance_context=governance_context,
         tracer=tracer,
-        thinking_budget=THINKING_BUDGET_LIGHT,
     )
 
-    return result.text
+    # Delegate to class method
+    return advisor.assess_compliance(
+        requirements=requirements,
+        teaser_text=teaser_text,
+        extracted_data=extracted_data,
+        use_native_tools=use_native_tools,
+    )
 
-
-def _run_compliance_text_based(
-    filled_data: str,
-    teaser_text: str,
-    extracted_data: str,
-    search_guidelines_fn: Callable,
-    tracer: TraceStore,
-    instruction: str = "",
-    compliance_criteria_hint: str = "",
-) -> str:
-    """Compliance using text-based tool calls (fallback). Returns raw analysis text."""
-
-    ca_instr = instruction or COMPLIANCE_ADVISOR_INSTRUCTION
-
-    planning_prompt = f"""{ca_instr}
-
-## YOUR TASK NOW
-
-Plan your compliance assessment for this deal.
-
-## DEAL DATA
-{filled_data}
-
-## EXTRACTED ANALYSIS
-{extracted_data[:3000]}
-
-## STEP 1: PLANNING
-
-1. What type of deal is this? What structure? What asset class?
-2. Which Guidelines sections apply to THIS specific deal?
-3. What specific limits and criteria do you need to verify?
-4. Are there any unusual features that trigger additional checks?
-
-You MUST plan your searches. List each search query:
-<TOOL>search_guidelines: "your specific query"</TOOL>
-"""
-
-    planning = call_llm(planning_prompt, MODEL_PRO, 0.0, 2500, "ComplianceAdvisor", tracer, thinking_budget=THINKING_BUDGET_LIGHT)
-    if not planning.success:
-        tracer.record("ComplianceAdvisor", "LLM_FAIL", f"Planning call failed: {planning.error or 'Unknown'}")
-        return f"[Compliance analysis failed: {planning.error}]"
-
-    tool_calls = parse_tool_calls(planning.text, "search_guidelines")
-
-    agent_planned_queries = len(tool_calls)
-    if agent_planned_queries == 0:
-        tracer.record(
-            "ComplianceAdvisor", "WARNING",
-            "Agent planned 0 RAG queries — retrying"
-        )
-        retry_prompt = f"""You MUST search the Guidelines document before assessing compliance.
-
-This deal involves: {extracted_data[:500]}
-
-Generate 3-5 search queries to find the applicable Guidelines limits and requirements.
-Each query should target a specific section, limit, or requirement.
-
-<TOOL>search_guidelines: "your specific query"</TOOL>
-"""
-        retry = call_llm(retry_prompt, MODEL_FLASH, 0.0, 1000, "ComplianceAdvisor", tracer, thinking_budget=THINKING_BUDGET_NONE)
-        tool_calls = parse_tool_calls(retry.text, "search_guidelines")
-        tracer.record(
-            "ComplianceAdvisor", "RETRY_RESULT",
-            f"Retry produced {len(tool_calls)} queries (original: {agent_planned_queries})"
-        )
-
-    guideline_results: dict[str, Any] = {}
-    for query in tool_calls[:7]:
-        tracer.record("ComplianceAdvisor", "RAG_SEARCH", f"Agent-planned: {query[:60]}...")
-        result = search_guidelines_fn(query, num_results=4)
-        guideline_results[query] = result
-
-    rag_context = format_rag_results(guideline_results)
-
-    assessment_prompt = f"""{ca_instr}
-
-## GUIDELINES FROM RAG SEARCH
-{rag_context}
-
-## DEAL DATA
-
-### Filled Requirements:
-{filled_data}
-
-### Extracted Analysis:
-{extracted_data}
-
-### Teaser:
-{teaser_text}
-
-## NOW: COMPLETE YOUR COMPLIANCE ASSESSMENT
-
-Using the Guidelines search results above:
-1. Check the deal against EVERY applicable criterion you found in the Guidelines
-2. For each criterion, cite the SPECIFIC Guidelines section and limit
-3. Only use limits from the search results — do NOT guess or use general knowledge
-4. If a relevant limit was not found in the search, flag it as "UNABLE TO VERIFY — not found in search results"
-
-Include ALL applicable criteria found in the Guidelines.
-"""
-
-    result = call_llm(assessment_prompt, MODEL_PRO, 0.0, 32000, "ComplianceAdvisor", tracer, thinking_budget=THINKING_BUDGET_STANDARD)
-    if not result.success:
-        tracer.record("ComplianceAdvisor", "LLM_FAIL", f"Assessment call failed: {result.error or 'Unknown'}")
-        return f"[Compliance assessment failed: {result.error}]"
-    return result.text
 
 
 # =============================================================================
