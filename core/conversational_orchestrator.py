@@ -18,7 +18,7 @@ from agents import (
     create_process_analyst_responder,
     create_compliance_advisor_responder,
 )
-from core.governance_discovery import discover_governance
+from core.governance_discovery import run_governance_discovery
 from core.llm_client import call_llm
 from tools.rag_search import search_procedure_documents, search_guidelines_documents
 from config.settings import MODEL_PRO
@@ -87,7 +87,7 @@ class ConversationalOrchestrator:
 
     def _load_governance(self) -> dict[str, Any]:
         """Load governance frameworks at startup."""
-        result = discover_governance()
+        result = run_governance_discovery()
         return {
             "frameworks": result.get("frameworks", []),
             "summary": result.get("summary", ""),
