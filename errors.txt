@@ -1,40 +1,4 @@
-────────────────────────── Traceback (most recent call last) ───────────────────────────
-  C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\streamlit\runtime\scr
-  iptrunner\exec_code.py:129 in exec_func_with_error_handling
-
-  C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\streamlit\runtime\scr
-  iptrunner\script_runner.py:672 in code_to_exec
-
-  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-ui-refactor-and-tracing_v3\ui\app.py:284 in <module>
-
-    281
-    282
-    283 if __name__ == "__main__":
-  ❱ 284 │   main()
-    285
-
-  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-ui-refactor-and-tracing_v3\ui\app.py:270 in main
-
-    267 │   if phase == "SETUP":
-    268 │   │   render_phase_setup()
-    269 │   elif phase == "ANALYSIS":
-  ❱ 270 │   │   render_phase_analysis()
-    271 │   elif phase == "PROCESS_GAPS":
-    272 │   │   render_phase_process_gaps()
-    273 │   elif phase == "COMPLIANCE":
-
-  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-ui-refactor-and-tracing_v3\ui\phases\analysis.py:195 in
-  render_phase_analysis
-
-    192 │   │   │   │   │   │   st.rerun()
-    193 │   │   │   else:
-    194 │   │   │   │   if st.button("➡️ Continue to Requirements", type="primary", use
-  ❱ 195 │   │   │   │   │   _advance_phase("PROCESS_GAPS")
-    196 │   │   │   │   │   st.rerun()
-    197
-    198
-────────────────────────────────────────────────────────────────────────────────────────
-NameError: name '_advance_phase' is not defined
+Pydantic validation failed for ProcessDecision: 1 validation error for ProcessDecision
+origination_method
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
