@@ -22,7 +22,7 @@ from core.governance_discovery import run_governance_discovery
 from core.llm_client import call_llm
 from tools.rag_search import tool_search_procedure, tool_search_guidelines
 from config.settings import MODEL_PRO
-from core.trace_store import get_tracer, TraceStore
+from core.tracing import get_tracer, TraceStore
 
 
 class ConversationalOrchestrator:
