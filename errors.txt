@@ -1,4 +1,52 @@
-Pydantic validation failed for ProcessDecision: 1 validation error for ProcessDecision
-origination_method
-  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
-    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+────────────────────────── Traceback (most recent call last) ───────────────────────────
+  C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\streamlit\runtime\scr
+  iptrunner\exec_code.py:129 in exec_func_with_error_handling
+
+  C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\streamlit\runtime\scr
+  iptrunner\script_runner.py:672 in code_to_exec
+
+  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
+  Omni\WBLA-feature-ui-refactor-and-tracing_v5\ui\app.py:284 in <module>
+
+    281
+    282
+    283 if __name__ == "__main__":
+  ❱ 284 │   main()
+    285
+
+  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
+  Omni\WBLA-feature-ui-refactor-and-tracing_v5\ui\app.py:272 in main
+
+    269 │   elif phase == "ANALYSIS":
+    270 │   │   render_phase_analysis()
+    271 │   elif phase == "PROCESS_GAPS":
+  ❱ 272 │   │   render_phase_process_gaps()
+    273 │   elif phase == "COMPLIANCE":
+    274 │   │   render_phase_compliance()
+    275 │   elif phase == "DRAFTING":
+
+  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
+  Omni\WBLA-feature-ui-refactor-and-tracing_v5\ui\phases\process_gaps.py:54 in
+  render_phase_process_gaps
+
+     51 │   │   │
+     52 │   │   │   # Auto-fill from analysis
+     53 │   │   │   if st.session_state.process_requirements:
+  ❱  54 │   │   │   │   _auto_fill_requirements()
+     55 │   │   │   │   # Aggressive: auto-suggest remaining CRITICAL requirements ind
+     56 │   │   │   │   _auto_suggest_critical_requirements()
+     57
+
+  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
+  Omni\WBLA-feature-ui-refactor-and-tracing_v5\ui\phases\process_gaps.py:334 in
+  _auto_fill_requirements
+
+    331
+    332 1. **SEMANTIC MATCHING:** Requirement names may differ from source terminology
+    333    Examples of equivalent terms:
+  ❱ 334 {get_terminology_synonyms(st.session_state.get("governance_context"))}
+    335
+    336    **Search for CONCEPTS, not exact words.** Be flexible in matching terminolo
+    337
+────────────────────────────────────────────────────────────────────────────────────────
+NameError: name 'get_terminology_synonyms' is not defined
