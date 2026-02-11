@@ -11,7 +11,7 @@ from datetime import datetime
 from config.settings import PRODUCT_NAME
 from ui.components.agent_dashboard import render_agent_dashboard
 from ui.utils.session_state import get_tracer
-from tools.export_utils import generate_docx, generate_audit_trail
+from core.export import generate_docx, generate_audit_trail
 
 
 def render_phase_complete():
