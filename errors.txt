@@ -1,9 +1,67 @@
-Failed to draft section 'Transaction Summary': name '_build_drafting_context' is not defined
-Failed to draft section 'Borrower & Sponsor Analysis': name '_build_drafting_context' is not defined
-Failed to draft section 'Asset & Market Analysis': name '_build_drafting_context' is not defined
-Failed to draft section 'Tenant & Lease Analysis': name '_build_drafting_context' is not defined
-Failed to draft section 'Financial Analysis': name '_build_drafting_context' is not defined
-Failed to draft section 'Proposed Facility & Covenants': name '_build_drafting_context' is not defined
-Failed to draft section 'Risk Analysis & Mitigants': name '_build_drafting_context' is not defined
-Failed to draft section 'Compliance & Policy Adherence': name '_build_drafting_context' is not defined
-Failed to draft section 'Supporting Documents': name '_build_drafting_context' is not defined
+Streaming LLM call failed for Writer: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.', 'status': 'RESOURCE_EXHAUSTED'}}
+Traceback (most recent call last):
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-ui-refactor-and-tracing_v7\core\llm_client.py", line 461, in call_llm_streaming
+    result_text = _call_gemini_streaming(
+                  ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 338, in wrapped_f
+    return copy(f, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 477, in __call__
+    do = self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 378, in iter
+    result = action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 400, in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 480, in __call__
+    result = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-ui-refactor-and-tracing_v7\core\llm_client.py", line 414, in _call_gemini_streaming
+    for chunk in client.models.generate_content_stream(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\models.py", line 5404, in generate_content_stream
+    for chunk in response:
+                 ^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\models.py", line 4098, in _generate_content_stream
+    for response in self._api_client.request_streamed(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 1403, in request_streamed
+    session_response = self._request(http_request, http_options, stream=True)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 1222, in _request
+    return self._retry(self._request_once, http_request, stream)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 477, in __call__
+    do = self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 378, in iter
+    result = action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 420, in exc_check
+    raise retry_exc.reraise()
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 187, in reraise
+    raise self.last_attempt.result()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\tenacity\__init__.py", line 480, in __call__
+    result = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\_api_client.py", line 1187, in _request_once
+    errors.APIError.raise_for_response(response)
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\errors.py", line 121, in raise_for_response
+    cls.raise_error(response.status_code, response_json, response)
+  File "C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\google\genai\errors.py", line 146, in raise_error
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.', 'status': 'RESOURCE_EXHAUSTED'}}
