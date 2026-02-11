@@ -72,27 +72,45 @@ Merge mini-agents into 4 core agents
 
 ---
 
-### **Phase 2: Conversational Interface** (Week 3-4)
-Replace phase-based UI with chat interface
+### **Phase 2: Conversational Interface + Agent Communication** ✅ (Week 3-4)
+Replace phase-based UI with chat interface + integrate agent-to-agent communication
 
-**2.1 Chat UI Component**
-- Replace Streamlit phase UI with chat messages
-- Display: User messages + Agent responses
-- Show: Progress indicators, summaries, checkpoints
+**2.1 Chat UI Component** ✅ COMPLETE
+- ✅ Created `ui/chat_app.py` with Streamlit chat interface
+- ✅ File upload sidebar ('+' button equivalent)
+- ✅ Display: User messages + Agent responses
+- ✅ Show: Progress indicators, summaries, checkpoints
 
-**2.2 Running Commentary**
-- Add narration to Orchestrator
-- Example: "📄 Reading teaser... ✓", "🔍 Analyzing structure..."
-- Display progress tree with ✓/⏳ indicators
+**2.2 ConversationalOrchestrator** ✅ COMPLETE
+- ✅ Created `core/conversational_orchestrator.py`
+- ✅ Intent detection: analyze_deal, discover_requirements, check_compliance, draft_section, query_agent
+- ✅ Context-aware routing to ProcessAnalyst, ComplianceAdvisor, Writer
+- ✅ Integrated AgentCommunicationBus for agent-to-agent queries
+- ✅ Registered responders for ProcessAnalyst and ComplianceAdvisor
 
-**2.3 Approval Checkpoints**
-- Add human-in-the-loop prompts
-- Format: "Should I proceed?" [Yes] [Review] [Modify]
-- Block autonomous execution until approval
+**2.3 Agent-to-Agent Communication** ✅ COMPLETE
+- ✅ Writer can query ProcessAnalyst for data clarification
+- ✅ Writer can query ComplianceAdvisor for guideline context
+- ✅ Communication log displayed in sidebar (💬 Agent Comms)
+- ✅ User can view full agent-to-agent query history
+- ✅ User can directly query agents: "Ask ProcessAnalyst about loan amount"
 
-**2.4 Inline Summaries**
-- Display "💡 Summary so far" after each major step
-- Show "🎯 Next steps" before requesting approval
+**2.4 Running Commentary + Thinking Process** ✅ COMPLETE
+- ✅ Visible thinking steps with st.status()
+- ✅ Color-coded progress: ✓ (success), ⏳ (in progress), ❌ (error), 💬 (agent comm)
+- ✅ Example: "📄 Reading teaser... ✓", "🔍 Analyzing structure...", "💬 Writer consulting ComplianceAdvisor..."
+- ✅ Display progress in expandable status widget
+
+**2.5 Approval Checkpoints** ✅ COMPLETE
+- ✅ Human-in-the-loop prompts after major actions
+- ✅ Format: "💡 Next: [suggested action]" with [✅ Proceed] button
+- ✅ requires_approval flag blocks autonomous execution
+- ✅ next_suggestion provides context for user decision
+
+**2.6 Inline Summaries** ✅ COMPLETE
+- ✅ Display "Current Status" in general help
+- ✅ Show "🎯 Next steps" after each action
+- ✅ Context-aware suggestions based on workflow state
 
 ---
 
