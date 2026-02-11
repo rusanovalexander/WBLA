@@ -5,6 +5,7 @@ Lines 1646-1822
 """
 
 import streamlit as st
+import logging
 from pathlib import Path
 from datetime import datetime
 import json

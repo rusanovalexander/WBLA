@@ -9,6 +9,7 @@ from pathlib import Path
 from datetime import datetime
 import json
 import logging
+import os
 
 from config.settings import *
 from tools.document_loader import *
