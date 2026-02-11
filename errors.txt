@@ -1,9 +1,11 @@
-Native tool calling failed, falling back to text-based: cannot import name 'estimate_cost' from 'core.tracing' (C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-ui-refactor-and-tracing_v8\core\tracing\__init__.py)
-Native compliance tools failed: cannot import name 'estimate_cost' from 'core.tracing' (C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-ui-refactor-and-tracing_v8\core\tracing\__init__.py)
-Pydantic validation failed for ComplianceCheck: 1 validation error for ComplianceCheck
-severity
-  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
-    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-autonomous-agents_v1>python -m streamlit run ui/chat_app.py
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://172.16.94.75:8501
+  External URL: http://144.178.220.33:8501
+
 ────────────────────────── Traceback (most recent call last) ───────────────────────────
   C:\Users\GV20FI\AppData\Roaming\Python\Python312\site-packages\streamlit\runtime\scr
   iptrunner\exec_code.py:129 in exec_func_with_error_handling
@@ -12,58 +14,28 @@ severity
   iptrunner\script_runner.py:672 in code_to_exec
 
   C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-ui-refactor-and-tracing_v8\ui\app.py:284 in <module>
+  Omni\WBLA-feature-autonomous-agents_v1\ui\chat_app.py:18 in <module>
 
-    281
-    282
-    283 if __name__ == "__main__":
-  ❱ 284 │   main()
-    285
-
-  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-ui-refactor-and-tracing_v8\ui\app.py:278 in main
-
-    275 │   elif phase == "DRAFTING":
-    276 │   │   render_phase_drafting()
-    277 │   elif phase == "COMPLETE":
-  ❱ 278 │   │   render_phase_complete()
-    279 │   else:
-    280 │   │   render_phase_setup()
-    281
-
-  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-ui-refactor-and-tracing_v8\ui\phases\complete.py:85 in
-  render_phase_complete
-
-    82 │   │   else:
-    83 │   │   │   if st.button("📋 Generate Audit Trail", use_container_width=True):
-    84 │   │   │   │   with st.spinner("Generating audit trail..."):
-  ❱ 85 │   │   │   │   │   path = generate_audit_trail(dict(st.session_state), get_tra
-    86 │   │   │   │   │   if path:
-    87 │   │   │   │   │   │   st.session_state["_audit_path"] = path
-    88 │   │   │   │   │   │   st.rerun()
-
-  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-ui-refactor-and-tracing_v8\core\export.py:437 in
-  generate_audit_trail
-
-    434 │   output_path = output_dir / filename
-    435 │
-    436 │   with open(output_path, "w") as f:
-  ❱ 437 │   │   f.write("\n".join(lines))
-    438 │
-    439 │   logger.info("Audit trail saved: %s", output_path)
-    440 │   return str(output_path)
-
-  C:\Program Files\Python312\Lib\encodings\cp1252.py:19 in encode
-
-     16
-     17 class IncrementalEncoder(codecs.IncrementalEncoder):
-     18 │   def encode(self, input, final=False):
-  ❱  19 │   │   return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+     15 # Add parent directory to path
+     16 sys.path.insert(0, str(Path(__file__).parent.parent))
+     17
+  ❱  18 from core.conversational_orchestrator import ConversationalOrchestrator
+     19
      20
-     21 class IncrementalDecoder(codecs.IncrementalDecoder):
-     22 │   def decode(self, input, final=False):
+     21 def init_session_state():
+
+  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
+  Omni\WBLA-feature-autonomous-agents_v1\core\conversational_orchestrator.py:21 in
+  <module>
+
+     18 │   create_process_analyst_responder,
+     19 │   create_compliance_advisor_responder,
+     20 )
+  ❱  21 from core.governance_discovery import discover_governance
+     22 from core.llm_client import call_llm
+     23 from tools.rag_search import search_procedure_documents, search_guidelines_doc
+     24 from config.settings import MODEL_PRO
 ────────────────────────────────────────────────────────────────────────────────────────
-UnicodeEncodeError: 'charmap' codec can't encode characters in position 219-268:
-character maps to <undefined>
+ImportError: cannot import name 'discover_governance' from 'core.governance_discovery'
+(C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
+Omni\WBLA-feature-autonomous-agents_v1\core\governance_discovery.py)
