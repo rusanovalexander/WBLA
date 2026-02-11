@@ -177,7 +177,7 @@ def render_phase_analysis():
                         "manual_input", "Orchestrator Override", "blocked", "overridden", "ANALYSIS"
                     )
                     if st.button("➡️ Continue to Requirements", type="primary", use_container_width=True):
-                        _advance_phase("PROCESS_GAPS")
+                        advance_phase("PROCESS_GAPS")
                         st.rerun()
             elif requires_review:
                 st.warning("⚠️ **Orchestrator recommends human review before proceeding:**")
@@ -188,11 +188,11 @@ def render_phase_analysis():
                         st.error(f"⚠️ HIGH: {flag['text'][:80]}")
                 if st.checkbox("I have reviewed the flags and wish to proceed"):
                     if st.button("➡️ Continue to Requirements", type="primary", use_container_width=True):
-                        _advance_phase("PROCESS_GAPS")
+                        advance_phase("PROCESS_GAPS")
                         st.rerun()
             else:
                 if st.button("➡️ Continue to Requirements", type="primary", use_container_width=True):
-                    _advance_phase("PROCESS_GAPS")
+                    advance_phase("PROCESS_GAPS")
                     st.rerun()
 
 

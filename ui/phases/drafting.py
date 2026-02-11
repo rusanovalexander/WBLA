@@ -187,7 +187,7 @@ def render_phase_drafting():
                 can_export = st.checkbox("I have reviewed the drafts and wish to proceed", key="drafting_override")
             if can_export:
                 if st.button("➡️ Continue to Export", type="primary", use_container_width=True):
-                    _advance_phase("COMPLETE")
+                    advance_phase("COMPLETE")
                     st.rerun()
 
 

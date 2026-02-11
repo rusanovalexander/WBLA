@@ -205,11 +205,11 @@ def render_phase_compliance():
                     "manual_input", "Compliance Override", "blocked", "overridden", "COMPLIANCE"
                 )
                 if st.button("➡️ Continue to Drafting", use_container_width=True):
-                    _advance_phase("DRAFTING")
+                    advance_phase("DRAFTING")
                     st.rerun()
         else:
             if st.button("➡️ Continue to Drafting", type="primary", use_container_width=True):
-                _advance_phase("DRAFTING")
+                advance_phase("DRAFTING")
                 st.rerun()
 
 

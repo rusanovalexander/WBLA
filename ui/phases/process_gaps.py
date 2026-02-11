@@ -270,16 +270,16 @@ def render_phase_process_gaps():
         st.warning(f"⚠️ {len(unfilled_critical)} CRITICAL requirements unfilled: {', '.join(unfilled_critical[:5])}")
         if st.checkbox("Proceed anyway (not recommended)"):
             if st.button("➡️ Continue to Compliance", use_container_width=True):
-                _advance_phase("COMPLIANCE")
+                advance_phase("COMPLIANCE")
                 st.rerun()
     elif not reqs:
         st.info("No requirements defined. Add requirements above or continue.")
         if st.button("➡️ Continue to Compliance", use_container_width=True):
-            _advance_phase("COMPLIANCE")
+            advance_phase("COMPLIANCE")
             st.rerun()
     else:
         if st.button("➡️ Continue to Compliance", type="primary", use_container_width=True):
-            _advance_phase("COMPLIANCE")
+            advance_phase("COMPLIANCE")
             st.rerun()
 
 
