@@ -6,7 +6,7 @@
   iptrunner\script_runner.py:672 in code_to_exec
 
   C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-autonomous-agents_v2\ui\chat_app.py:18 in <module>
+  Omni\WBLA-feature-autonomous-agents_v3\ui\chat_app.py:18 in <module>
 
      15 # Add parent directory to path
      16 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -17,17 +17,15 @@
      21 def init_session_state():
 
   C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-autonomous-agents_v2\core\conversational_orchestrator.py:23 in
+  Omni\WBLA-feature-autonomous-agents_v3\core\conversational_orchestrator.py:25 in
   <module>
 
-     20 )
-     21 from core.governance_discovery import run_governance_discovery
      22 from core.llm_client import call_llm
-  ❱  23 from tools.rag_search import search_procedure_documents, search_guidelines_doc
+     23 from tools.rag_search import tool_search_procedure, tool_search_guidelines
      24 from config.settings import MODEL_PRO
-     25 from core.trace_store import get_tracer, TraceStore
+  ❱  25 from core.trace_store import get_tracer, TraceStore
      26
+     27
+     28 class ConversationalOrchestrator:
 ────────────────────────────────────────────────────────────────────────────────────────
-ImportError: cannot import name 'search_procedure_documents' from 'tools.rag_search'
-(C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-Omni\WBLA-feature-autonomous-agents_v2\tools\rag_search.py)
+ModuleNotFoundError: No module named 'core.trace_store'
