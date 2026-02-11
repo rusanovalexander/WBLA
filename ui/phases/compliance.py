@@ -214,27 +214,7 @@ def render_phase_compliance():
 
 
 # =============================================================================
-# Phase: DRAFTING — Adaptive Sections
+# Note: _build_drafting_context moved to ui/phases/drafting.py (where it's used)
 # =============================================================================
-
-def _build_drafting_context(structure: list, drafts: dict) -> dict:
-    """Build the full context for section drafting, including previously drafted sections."""
-    # Collect already-drafted sections so the Writer sees what came before
-    previously_drafted = ""
-    for section in structure:
-        name = section["name"]
-        if name in drafts:
-            previously_drafted += f"\n\n# {name}\n\n{drafts[name][:2000]}"
-
-    context = {
-        "teaser_text": st.session_state.teaser_text,
-        "example_text": st.session_state.example_text,
-        "extracted_data": st.session_state.extracted_data,
-        "compliance_result": st.session_state.compliance_result,
-        "requirements": st.session_state.process_requirements,
-        "supplement_texts": st.session_state.supplement_texts,
-        "previously_drafted": previously_drafted,
-    }
-    return context
 
 
