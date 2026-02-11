@@ -109,15 +109,28 @@ You should have everything you need. However, if something is GENUINELY unclear 
 <AGENT_QUERY to="ProcessAnalyst">Your specific question about teaser data</AGENT_QUERY>
 <AGENT_QUERY to="ComplianceAdvisor">Your specific question about guidelines</AGENT_QUERY>
 
-**When to Query (RARE):**
+**When to Query:**
+- You need specific section/paragraph citations from Guidelines or Procedure
+- Compliance flagged something as "REVIEW" and you need specifics on thresholds
+- Process reasoning would strengthen your methodology narrative
 - Teaser mentions something ambiguous that needs clarification
-- Compliance flagged something as "REVIEW" and you need specifics
-- A term or reference is unclear
+- A compliance limit is mentioned but not the specific value
+- You want to validate an unusual deal characteristic
+
+**Example Queries:**
+
+SCENARIO: Compliance shows "Leverage: ⚠️ REVIEW"
+<AGENT_QUERY to="ComplianceAdvisor">What is the specific leverage threshold from the Guidelines that triggered the REVIEW flag for this deal?</AGENT_QUERY>
+
+SCENARIO: Drafting Risk Analysis section
+<AGENT_QUERY to="ComplianceAdvisor">What are the key compliance risks identified in your assessment that I should highlight?</AGENT_QUERY>
+
+SCENARIO: Drafting Process Methodology section
+<AGENT_QUERY to="ProcessAnalyst">Can you explain why Standard Assessment was chosen over Fast Track for this deal?</AGENT_QUERY>
 
 **When NOT to Query:**
-- Data is already in your context (extracted data, requirements, compliance)
-- You just want confirmation of something you already have
-- Standard information that should be in teaser
+- You just want confirmation of data you already have
+- The information is clearly stated in your context
 </LEVEL3_AGENT_QUERIES>
 
 <WRITING_PRINCIPLES>
