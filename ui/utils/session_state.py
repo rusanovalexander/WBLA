@@ -15,9 +15,12 @@ from agents import (
 )
 from tools.change_tracker import ChangeLog
 from tools.phase_manager import PhaseManager
-from core.tracing import TraceStore, set_tracer
+from core.tracing import (
+    TraceStore, set_tracer,
+    init_trace_manager, VERTEX_TRACE_AVAILABLE
+)
 from core.llm_client import call_llm
-from config.settings import MODEL_PRO
+from config.settings import MODEL_PRO, PROJECT_ID, ENABLE_VERTEX_TRACE
 from tools.rag_search import tool_search_guidelines
 
 
@@ -120,9 +123,27 @@ def init_state():
     # Initialize tracer
     if st.session_state.tracer is None:
         st.session_state.tracer = TraceStore()
-    
+
     # AG-H2: Bind session tracer to contextvars so core modules use it
     set_tracer(st.session_state.tracer)
+
+    # Initialize Vertex AI Trace manager (if enabled)
+    if "vertex_trace_manager" not in st.session_state:
+        if ENABLE_VERTEX_TRACE and VERTEX_TRACE_AVAILABLE:
+            try:
+                vertex_trace_mgr = init_trace_manager(PROJECT_ID, enabled=True)
+                st.session_state.vertex_trace_manager = vertex_trace_mgr
+                # Start a new trace for this session
+                import datetime
+                trace_name = f"CreditPack_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                vertex_trace_mgr.start_trace(trace_name)
+            except Exception as e:
+                st.session_state.vertex_trace_manager = None
+                # Silently fail - don't block the app if trace init fails
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to initialize Vertex AI Trace: {e}")
+        else:
+            st.session_state.vertex_trace_manager = None
 
 
 def get_tracer() -> TraceStore:

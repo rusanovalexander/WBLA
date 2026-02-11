@@ -21,8 +21,14 @@ from tenacity import (
     wait_exponential,
 )
 
-from config.settings import PROJECT_ID, MODEL_PRO, ENABLE_STREAMING
-from core.tracing import TraceStore, get_tracer, estimate_tokens
+from config.settings import (
+    PROJECT_ID, MODEL_PRO, ENABLE_STREAMING,
+    ENABLE_VERTEX_TRACE, TRACE_SAMPLING_RATE
+)
+from core.tracing import (
+    TraceStore, get_tracer, estimate_tokens,
+    get_trace_manager, VERTEX_TRACE_AVAILABLE
+)
 from models.schemas import LLMCallResult
 
 logger = logging.getLogger(__name__)
@@ -180,8 +186,25 @@ def call_llm(
     if tracer is None:
         tracer = get_tracer()
 
+    # Vertex AI Trace integration (if enabled)
+    trace_manager = None
+    vertex_span_id = None
+    if ENABLE_VERTEX_TRACE and VERTEX_TRACE_AVAILABLE:
+        trace_manager = get_trace_manager()
+        if trace_manager:
+            import random
+            # Sample traces based on configured rate
+            if random.random() <= TRACE_SAMPLING_RATE:
+                vertex_span_id = trace_manager.create_span(
+                    f"{agent_name}_LLM_Call",
+                    metadata={"model": model, "temperature": str(temperature)}
+                )
+
     with tracer.trace_llm_call(agent_name, model, prompt) as ctx:
         try:
+            import time
+            start_time = time.time()
+
             response = _call_gemini(
                 prompt=prompt,
                 model=model,
@@ -189,6 +212,8 @@ def call_llm(
                 max_tokens=max_tokens,
                 thinking_budget=thinking_budget,
             )
+
+            latency_ms = (time.time() - start_time) * 1000
 
             # Guard: response.text can fail if no candidates (e.g., safety block, cancelled)
             try:
@@ -203,9 +228,24 @@ def call_llm(
                 usage = response.usage_metadata
                 ctx["tokens_in"] = getattr(usage, "prompt_token_count", 0) or 0
                 ctx["tokens_out"] = getattr(usage, "candidates_token_count", 0) or 0
+                thinking_tokens = getattr(usage, "thinking_token_count", 0) or 0
             else:
                 ctx["tokens_in"] = estimate_tokens(prompt)
                 ctx["tokens_out"] = estimate_tokens(result_text)
+                thinking_tokens = 0
+
+            # Record to Vertex AI Trace
+            if vertex_span_id and trace_manager:
+                trace_manager.record_llm_call(
+                    vertex_span_id,
+                    model=model,
+                    prompt_tokens=ctx["tokens_in"],
+                    completion_tokens=ctx["tokens_out"],
+                    latency_ms=latency_ms,
+                    thinking_tokens=thinking_tokens,
+                    success=True
+                )
+                trace_manager.end_span(vertex_span_id, status="OK")
 
             return LLMCallResult(
                 text=result_text,
@@ -217,6 +257,14 @@ def call_llm(
             )
 
         except Exception as e:
+            # Record error to Vertex AI Trace
+            if vertex_span_id and trace_manager:
+                trace_manager.end_span(
+                    vertex_span_id,
+                    status="ERROR",
+                    metadata={"error": str(e)[:500]}
+                )
+
             # If retryable (429, 503, etc.), re-raise to let tenacity retry
             if _is_retryable(e):
                 raise
