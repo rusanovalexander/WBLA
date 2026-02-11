@@ -6,7 +6,7 @@ Provides both in-memory and persistent tracing capabilities:
 - VertexTraceManager: Persistent Vertex AI Trace integration (new)
 """
 
-from .trace_store import TraceStore, set_tracer, get_tracer
+from .trace_store import TraceStore, set_tracer, get_tracer, estimate_tokens
 
 # Import Vertex AI tracing only if available
 try:
@@ -28,6 +28,7 @@ __all__ = [
     "TraceStore",
     "set_tracer",
     "get_tracer",
+    "estimate_tokens",
     "VertexTraceManager",
     "get_trace_manager",
     "init_trace_manager",
