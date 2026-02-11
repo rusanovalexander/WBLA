@@ -433,7 +433,7 @@ def generate_audit_trail(
     output_dir.mkdir(exist_ok=True)
     output_path = output_dir / filename
 
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
     logger.info("Audit trail saved: %s", output_path)

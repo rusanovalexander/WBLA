@@ -228,16 +228,22 @@ def _extract_compliance_checks(
             validated_checks = []
             for check_data in parsed:
                 try:
-                    # Pre-process: convert null reference to empty string
-                    if isinstance(check_data, dict) and check_data.get("reference") is None:
-                        check_data["reference"] = ""
+                    # Pre-process: convert null values to defaults
+                    if isinstance(check_data, dict):
+                        if check_data.get("reference") is None:
+                            check_data["reference"] = ""
+                        if check_data.get("severity") is None:
+                            check_data["severity"] = "MUST"
                     validated = ComplianceCheck.model_validate(check_data)
                     validated_checks.append(validated.model_dump())
                 except Exception as e:
                     logger.warning("Pydantic validation failed for ComplianceCheck: %s", e)
                     # Pre-process before adding raw data
-                    if isinstance(check_data, dict) and check_data.get("reference") is None:
-                        check_data["reference"] = ""
+                    if isinstance(check_data, dict):
+                        if check_data.get("reference") is None:
+                            check_data["reference"] = ""
+                        if check_data.get("severity") is None:
+                            check_data["severity"] = "MUST"
                     validated_checks.append(check_data)  # Keep raw if validation fails
             tracer.record("Extraction", "SUCCESS", f"Extracted {len(validated_checks)} checks")
             return validated_checks
@@ -262,15 +268,21 @@ def _extract_compliance_checks(
                 validated_checks = []
                 for check_data in tail_parsed:
                     try:
-                        # Pre-process: convert null reference to empty string
-                        if isinstance(check_data, dict) and check_data.get("reference") is None:
-                            check_data["reference"] = ""
+                        # Pre-process: convert null values to defaults
+                        if isinstance(check_data, dict):
+                            if check_data.get("reference") is None:
+                                check_data["reference"] = ""
+                            if check_data.get("severity") is None:
+                                check_data["severity"] = "MUST"
                         validated = ComplianceCheck.model_validate(check_data)
                         validated_checks.append(validated.model_dump())
                     except Exception:
                         # Pre-process before adding raw data
-                        if isinstance(check_data, dict) and check_data.get("reference") is None:
-                            check_data["reference"] = ""
+                        if isinstance(check_data, dict):
+                            if check_data.get("reference") is None:
+                                check_data["reference"] = ""
+                            if check_data.get("severity") is None:
+                                check_data["severity"] = "MUST"
                         validated_checks.append(check_data)
                 tracer.record("Extraction", "CHUNK_SUCCESS", f"Tail extraction got {len(validated_checks)} checks")
                 return validated_checks
