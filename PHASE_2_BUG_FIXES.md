@@ -75,6 +75,45 @@ def search_procedure(self, query: str, top_k: int = 3):
 
 ---
 
+## Bug #3: ModuleNotFoundError - trace_store
+
+### Error
+```
+ModuleNotFoundError: No module named 'core.trace_store'
+```
+
+### Root Cause
+- Used wrong import path for trace_store module
+- Actual location: `core/tracing/trace_store.py`
+- Module should be imported via `core.tracing` package
+
+### Fix (Commit 828147f)
+```python
+# Before
+from core.trace_store import get_tracer, TraceStore
+
+# After
+from core.tracing import get_tracer, TraceStore
+```
+
+### Files Changed
+- `core/conversational_orchestrator.py` (line 25)
+
+### Pattern Verification
+All existing code uses the correct pattern:
+```python
+# From agents/compliance_advisor.py
+from core.tracing import TraceStore, get_tracer
+
+# From core/orchestration.py
+from core.tracing import TraceStore, get_tracer
+
+# From ui/app.py
+from core.tracing import TraceStore, set_tracer
+```
+
+---
+
 ## Root Cause Analysis
 
 ### Why These Errors Occurred
@@ -128,6 +167,7 @@ def search_procedure(self, query: str, top_k: int = 3):
 - [x] ImportError: `search_guidelines_documents` → `tool_search_guidelines`
 - [x] Parameter mismatch: `top_k` → `num_results`
 - [x] Return type assumptions: `str` → `Dict[str, Any]`
+- [x] ModuleNotFoundError: `core.trace_store` → `core.tracing`
 
 ### 🧪 Next Testing Steps
 
@@ -160,6 +200,7 @@ def search_procedure(self, query: str, top_k: int = 3):
 |--------|-------------|-------|
 | `1dc7886` | Fix discover_governance import | conversational_orchestrator.py |
 | `c7c741a` | Fix RAG search function imports | conversational_orchestrator.py |
+| `828147f` | Fix trace_store import path | conversational_orchestrator.py |
 
 ---
 
