@@ -16,6 +16,7 @@ from tools.rag_search import *
 from core.orchestration import *
 from core.llm_client import *
 from core.parsers import *
+from core.governance_discovery import get_terminology_synonyms
 from agents import *
 from ui.utils.session_state import get_tracer, advance_phase
 
