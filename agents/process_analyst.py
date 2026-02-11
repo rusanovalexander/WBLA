@@ -409,3 +409,353 @@ process_analyst_config = {
     "temperature": AGENT_TEMPERATURES["process_analyst"],
     "tools": ["tool_search_procedure", "tool_load_document"],
 }
+# This will be appended to agents/process_analyst.py
+
+# =============================================================================
+# ProcessAnalyst Class (NEW - Phase 1.2 Consolidation)
+# =============================================================================
+
+"""
+ProcessAnalyst consolidates all analysis mini-agents:
+- Extraction (deal data extraction from teaser)
+- RequirementsDiscovery (dynamic requirements based on process path)
+
+Single entry point: analyze_deal() + discover_requirements()
+"""
+
+import logging
+from typing import Any, Callable
+from config.settings import MODEL_PRO, MODEL_FLASH, AGENT_MODELS, THINKING_BUDGET_NONE, THINKING_BUDGET_LIGHT, THINKING_BUDGET_STANDARD
+from core.llm_client import call_llm, call_llm_with_tools
+from core.tracing import TraceStore, get_tracer
+from core.parsers import parse_tool_calls, format_rag_results, safe_extract_json
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Decision Extraction Prompt
+# =============================================================================
+
+PROCESS_DECISION_EXTRACTION_PROMPT = """You are a JSON extraction assistant. Extract the process path decision from the analysis below.
+
+## ANALYSIS TEXT
+{analysis_text}
+
+## TASK
+Extract the agent's decision into EXACTLY this JSON format. Use ONLY what the agent explicitly stated.
+
+CRITICAL FORMATTING RULES:
+- You MUST output ONLY valid JSON with NO text before or after
+- Do NOT include markdown code fences like ```json
+- Do NOT include explanations, preambles, or any other text
+- Output ONLY the JSON object between the <json_output></json_output> tags below
+
+<json_output>
+{{
+  "assessment_approach": "<exact approach name>",
+  "origination_method": "<exact method name>",
+  "assessment_reasoning": "<why this approach>",
+  "origination_reasoning": "<why this method>",
+  "confidence": "HIGH",
+  "decision_found": true
+}}
+</json_output>
+
+Output ONLY the JSON between <json_output></json_output> tags.
+"""
+
+
+# =============================================================================
+# Requirements Discovery Prompt
+# =============================================================================
+
+REQUIREMENTS_DISCOVERY_PROMPT = """You are an analyst. Based on this deal analysis and process path, identify ALL information requirements.
+
+## DEAL ANALYSIS
+{analysis_text}
+
+## PROCESS PATH
+- Assessment Approach: {assessment_approach}
+- Origination Method: {origination_method}
+
+## PROCEDURE CONTEXT
+{procedure_rag_context}
+
+{governance_categories}
+
+## TASK
+Discover requirements for this specific deal and process path.
+
+OUTPUT FORMAT (JSON only):
+
+<json_output>
+{{
+  "requirements": [
+    {{
+      "name": "Deal Size",
+      "category": "Financial Information",
+      "description": "Total transaction value",
+      "required": true,
+      "source_hint": "Teaser summary"
+    }}
+  ]
+}}
+</json_output>
+"""
+
+
+class ProcessAnalyst:
+    """
+    ProcessAnalyst Agent - handles all deal analysis and requirements discovery.
+    """
+
+    def __init__(
+        self,
+        search_procedure_fn: Callable,
+        governance_context: dict[str, Any] | None = None,
+        tracer: TraceStore | None = None,
+    ):
+        self.search_procedure_fn = search_procedure_fn
+        self.governance_context = governance_context
+        self.tracer = tracer or get_tracer()
+        self.instruction = get_process_analyst_instruction(governance_context)
+
+    def analyze_deal(self, teaser_text: str, use_native_tools: bool = True) -> dict[str, Any]:
+        """Complete deal analysis including process path determination."""
+        self.tracer.record("ProcessAnalyst", "START", "Beginning analysis")
+
+        if use_native_tools:
+            try:
+                raw = self._run_analysis_native(teaser_text)
+            except Exception as e:
+                logger.warning("Native tools failed: %s", e)
+                self.tracer.record("ProcessAnalyst", "FALLBACK", str(e))
+                raw = self._run_analysis_text_based(teaser_text)
+        else:
+            raw = self._run_analysis_text_based(teaser_text)
+
+        decision = self._extract_structured_decision(raw["full_analysis"])
+
+        if decision:
+            raw["process_path"] = decision.get("assessment_approach") or ""
+            raw["origination_method"] = decision.get("origination_method") or ""
+            raw["assessment_reasoning"] = decision.get("assessment_reasoning") or ""
+            raw["origination_reasoning"] = decision.get("origination_reasoning") or ""
+            raw["decision_found"] = bool(raw["process_path"] and raw["origination_method"])
+            raw["decision_confidence"] = decision.get("confidence") or "MEDIUM"
+            raw["fallback_used"] = False
+        else:
+            raw["process_path"] = ""
+            raw["origination_method"] = ""
+            raw["assessment_reasoning"] = ""
+            raw["origination_reasoning"] = ""
+            raw["decision_found"] = False
+            raw["decision_confidence"] = "NONE"
+            raw["fallback_used"] = False
+            self.tracer.record("ProcessAnalyst", "WARNING", "No clear decision")
+
+        self.tracer.record("ProcessAnalyst", "COMPLETE", f"Analysis: {raw['process_path']}")
+        return raw
+
+    def discover_requirements(
+        self, analysis_text: str, assessment_approach: str, origination_method: str
+    ) -> list[dict]:
+        """Discover dynamic requirements."""
+        self.tracer.record("RequirementsDiscovery", "START", "Discovering requirements")
+
+        procedure_rag_context = self._search_procedure_for_requirements(
+            origination_method, assessment_approach
+        )
+        governance_categories = self._build_governance_categories_hint()
+
+        prompt = REQUIREMENTS_DISCOVERY_PROMPT.format(
+            analysis_text=analysis_text[:4000],
+            assessment_approach=assessment_approach or "assessment",
+            origination_method=origination_method or "origination",
+            procedure_rag_context=procedure_rag_context,
+            governance_categories=governance_categories,
+        )
+
+        result = call_llm(
+            prompt, MODEL_PRO, 0.0, 8000,
+            "RequirementsDiscovery", self.tracer,
+            thinking_budget=THINKING_BUDGET_LIGHT
+        )
+
+        if not result.success:
+            self.tracer.record("RequirementsDiscovery", "FAIL", result.error or "Unknown")
+            return []
+
+        parsed = safe_extract_json(result.text, "object")
+        if not parsed or "requirements" not in parsed:
+            return []
+
+        requirements = parsed["requirements"]
+        if not isinstance(requirements, list):
+            return []
+
+        ui_requirements = []
+        for req in requirements:
+            if isinstance(req, dict):
+                ui_requirements.append({
+                    "name": req.get("name", "Unknown"),
+                    "category": req.get("category", "General"),
+                    "description": req.get("description", ""),
+                    "required": req.get("required", True),
+                    "value": "",
+                    "status": "empty",
+                    "source_hint": req.get("source_hint", ""),
+                })
+
+        self.tracer.record("RequirementsDiscovery", "COMPLETE", f"Found {len(ui_requirements)} reqs")
+        return ui_requirements
+
+    def _run_analysis_native(self, teaser_text: str) -> dict[str, Any]:
+        """Native function calling."""
+        from tools.function_declarations import get_agent_tools, create_tool_executor
+
+        tools = get_agent_tools("ProcessAnalyst", governance_context=self.governance_context)
+        if not tools:
+            raise RuntimeError("No native tools")
+
+        executor = create_tool_executor(
+            search_procedure_fn=self.search_procedure_fn,
+            search_guidelines_fn=lambda q, n=3: {"status": "ERROR", "results": []},
+            search_rag_fn=lambda q, n=3: {"status": "ERROR", "results": []},
+        )
+
+        prompt = f"""{self.instruction}
+
+## TEASER DOCUMENT
+{teaser_text}
+
+## TASK
+Analyze and determine assessment approach and origination method.
+Search Procedure document AT LEAST 3 TIMES before recommending.
+"""
+
+        result = call_llm_with_tools(
+            prompt=prompt,
+            tools=tools,
+            tool_executor=executor,
+            model=AGENT_MODELS.get("process_analyst", MODEL_FLASH),
+            temperature=0.0,
+            max_tokens=16000,
+            agent_name="ProcessAnalyst",
+            max_tool_rounds=5,
+            tracer=self.tracer,
+            thinking_budget=THINKING_BUDGET_LIGHT,
+        )
+
+        return {"full_analysis": result.text, "procedure_sources": {}}
+
+    def _run_analysis_text_based(self, teaser_text: str) -> dict[str, Any]:
+        """Text-based fallback."""
+        planning_prompt = f"""{self.instruction}
+
+## TEASER
+{teaser_text[:3000]}
+
+## STEP 1: Plan searches
+<TOOL>search_procedure: "your query"</TOOL>
+"""
+
+        planning = call_llm(
+            planning_prompt, MODEL_FLASH, 0.0, 2000,
+            "ProcessAnalyst", self.tracer,
+            thinking_budget=THINKING_BUDGET_LIGHT
+        )
+
+        if not planning.success:
+            return {"full_analysis": f"[Failed: {planning.error}]", "procedure_sources": {}}
+
+        tool_calls = parse_tool_calls(planning.text, "search_procedure")
+
+        procedure_results: dict[str, Any] = {}
+        for query in tool_calls[:5]:
+            self.tracer.record("ProcessAnalyst", "RAG_SEARCH", f"Proc: {query[:60]}")
+            try:
+                procedure_results[query] = self.search_procedure_fn(query, 4)
+            except Exception as e:
+                logger.warning("Search failed: %s", e)
+                procedure_results[query] = {"status": "ERROR", "results": []}
+
+        rag_context = format_rag_results(procedure_results)
+
+        analysis_prompt = f"""{self.instruction}
+
+## TEASER
+{teaser_text}
+
+## PROCEDURE RESULTS
+{rag_context}
+
+## TASK
+Produce FULL analysis with assessment approach and origination method.
+"""
+
+        analysis = call_llm(
+            analysis_prompt, AGENT_MODELS.get("process_analyst", MODEL_FLASH),
+            0.0, 16000, "ProcessAnalyst", self.tracer,
+            thinking_budget=THINKING_BUDGET_STANDARD
+        )
+
+        if not analysis.success:
+            return {"full_analysis": f"[Failed: {analysis.error}]", "procedure_sources": {}}
+
+        return {"full_analysis": analysis.text, "procedure_sources": procedure_results}
+
+    def _extract_structured_decision(self, analysis_text: str) -> dict[str, Any] | None:
+        """Extract decision."""
+        self.tracer.record("ProcessAnalyst", "EXTRACTION", "Extracting decision")
+
+        prompt = PROCESS_DECISION_EXTRACTION_PROMPT.format(analysis_text=analysis_text[:8000])
+
+        result = call_llm(
+            prompt, MODEL_FLASH, 0.0, 1500,
+            "ProcessAnalyst", self.tracer,
+            thinking_budget=THINKING_BUDGET_NONE
+        )
+
+        if not result.success:
+            return None
+
+        parsed = safe_extract_json(result.text, "object")
+        return parsed if parsed and parsed.get("decision_found") else None
+
+    def _search_procedure_for_requirements(self, origination_method: str, assessment_approach: str) -> str:
+        """Search for requirements."""
+        if not self.search_procedure_fn:
+            return "(No Procedure context)"
+
+        rag_queries = [
+            f"information requirements for {origination_method}",
+            f"required data fields {assessment_approach} assessment",
+        ]
+
+        rag_results: dict[str, Any] = {}
+        for query in rag_queries:
+            try:
+                rag_results[query] = self.search_procedure_fn(query, 3)
+            except Exception:
+                pass
+
+        return format_rag_results(rag_results) if rag_results else "(No results)"
+
+    def _build_governance_categories_hint(self) -> str:
+        """Build governance categories hint."""
+        if not self.governance_context:
+            return ""
+
+        if self.governance_context.get("discovery_status") not in ("complete", "partial"):
+            return ""
+
+        cats = self.governance_context.get("requirement_categories", [])
+        if not cats:
+            return ""
+
+        return f"""
+## DISCOVERED REQUIREMENT CATEGORIES
+{chr(10).join(f"- {cat}" for cat in cats)}
+"""

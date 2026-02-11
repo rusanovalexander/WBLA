@@ -401,7 +401,8 @@ def _regex_extract_compliance_table(compliance_text: str, tracer: TraceStore) ->
 
 
 # =============================================================================
-# Phase 1: Agentic Analysis
+# =============================================================================
+# Phase 1: Agentic Analysis (CLASS-BASED)
 # =============================================================================
 
 def run_agentic_analysis(
@@ -412,323 +413,27 @@ def run_agentic_analysis(
     governance_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    Agentic analysis — Process Analyst autonomously searches Procedure.
-
-    Returns dict with: full_analysis, process_path, origination_method,
-    procedure_sources, assessment_reasoning, origination_reasoning,
-    decision_found, decision_confidence, fallback_used
+    Agentic analysis — uses ProcessAnalyst class.
+    
+    Backward-compatible wrapper.
     """
+    from agents.process_analyst import ProcessAnalyst
+    
     if tracer is None:
         tracer = get_tracer()
-
-    tracer.record("ProcessAnalyst", "START", "Beginning agentic teaser analysis")
-
-    # Build governance-aware instruction
-    pa_instruction = get_process_analyst_instruction(governance_context)
-
-    # Try native function calling first
-    if use_native_tools:
-        try:
-            raw = _run_analysis_native(teaser_text, search_procedure_fn, tracer, pa_instruction, governance_context)
-        except Exception as e:
-            logger.warning("Native tool calling failed, falling back to text-based: %s", e)
-            tracer.record("ProcessAnalyst", "FALLBACK", f"Native tools failed: {e}")
-            raw = _run_analysis_text_based(teaser_text, search_procedure_fn, tracer, pa_instruction)
-    else:
-        raw = _run_analysis_text_based(teaser_text, search_procedure_fn, tracer, pa_instruction)
-
-    # Structured extraction — replaces keyword parsing
-    decision = _extract_structured_decision(raw["full_analysis"], tracer)
-
-    if decision:
-        raw["process_path"] = decision.get("assessment_approach") or ""
-        raw["origination_method"] = decision.get("origination_method") or ""
-        raw["assessment_reasoning"] = decision.get("assessment_reasoning") or ""
-        raw["origination_reasoning"] = decision.get("origination_reasoning") or ""
-        raw["decision_found"] = bool(raw["process_path"] and raw["origination_method"])
-        raw["decision_confidence"] = decision.get("confidence") or "MEDIUM"
-        raw["fallback_used"] = False
-    else:
-        # NO SILENT DEFAULT — flag it clearly
-        raw["process_path"] = ""
-        raw["origination_method"] = ""
-        raw["assessment_reasoning"] = ""
-        raw["origination_reasoning"] = ""
-        raw["decision_found"] = False
-        raw["decision_confidence"] = "NONE"
-        raw["fallback_used"] = False
-        tracer.record(
-            "ProcessAnalyst", "WARNING",
-            "Agent did not produce a clear process path decision — human must decide"
-        )
-
-    return raw
-
-
-def _run_analysis_native(
-    teaser_text: str,
-    search_procedure_fn: Callable,
-    tracer: TraceStore,
-    instruction: str = "",
-    governance_context: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Analysis using native Gemini function calling."""
-    from tools.function_declarations import get_agent_tools, create_tool_executor
-
-    tools = get_agent_tools("ProcessAnalyst", governance_context=governance_context)
-    if not tools:
-        raise RuntimeError("No native tool declarations available")
-
-    executor = create_tool_executor(
+    
+    analyst = ProcessAnalyst(
         search_procedure_fn=search_procedure_fn,
-        search_guidelines_fn=lambda q, n=3: {"status": "ERROR", "results": []},
-        search_rag_fn=lambda q, n=3: {"status": "ERROR", "results": []},
-    )
-
-    pa_instr = instruction or PROCESS_ANALYST_INSTRUCTION
-
-    prompt = f"""{pa_instr}
-
-## YOUR TASK NOW
-
-Analyze this teaser document completely.
-
-<TEASER_DOCUMENT>
-{teaser_text}
-</TEASER_DOCUMENT>
-
-## CRITICAL INSTRUCTIONS — READ BEFORE RESPONDING
-
-**YOU MUST SEARCH THE PROCEDURE DOCUMENT BEFORE PRODUCING YOUR ANALYSIS.**
-
-Do NOT write your analysis first. Instead:
-1. FIRST, call the search_procedure tool AT LEAST 3 TIMES to find relevant rules, thresholds, and requirements
-2. Read the search results carefully
-3. THEN AND ONLY THEN produce your full analysis with the search results incorporated
-
-If you produce an analysis without calling search_procedure first, your analysis will be REJECTED.
-
-Suggested initial searches:
-- search_procedure("assessment approach criteria thresholds")
-- search_procedure("origination methods document types")
-- search_procedure("proportionality criteria deal size")
-
-After searching, produce your FULL analysis following the OUTPUT_STRUCTURE.
-"""
-
-    result = call_llm_with_tools(
-        prompt=prompt,
-        tools=tools,
-        tool_executor=executor,
-        model=AGENT_MODELS.get("process_analyst", MODEL_PRO),
-        temperature=0.0,
-        max_tokens=32000,
-        agent_name="ProcessAnalyst",
-        max_tool_rounds=8,
+        governance_context=governance_context,
         tracer=tracer,
-        thinking_budget=THINKING_BUDGET_LIGHT,
     )
-
-    tracer.record("ProcessAnalyst", "ANALYSIS_DONE", f"Generated {len(result.text)} chars")
-
-    return {
-        "full_analysis": result.text,
-        "process_path": "",
-        "origination_method": "",
-        "procedure_sources": {},
-        "assessment_reasoning": "",
-        "origination_reasoning": "",
-    }
-
-
-def _run_analysis_text_based(
-    teaser_text: str,
-    search_procedure_fn: Callable,
-    tracer: TraceStore,
-    instruction: str = "",
-) -> dict[str, Any]:
-    """Analysis using text-based tool calls (fallback)."""
-
-    pa_instr = instruction or PROCESS_ANALYST_INSTRUCTION
-
-    # Step 1: Planning — agent decides what to search
-    planning_prompt = f"""{pa_instr}
-
-## YOUR TASK NOW
-
-Analyze this teaser and identify what Procedure sections you need to search.
-
-<TEASER_DOCUMENT>
-{teaser_text}
-</TEASER_DOCUMENT>
-
-## STEP 1: PLANNING
-
-Read the teaser and plan your RAG searches:
-1. What type of deal is this?
-2. What Procedure sections do you need to verify?
-3. What specific queries will you make?
-
-You MUST plan at least 2 searches. If you're unsure, search broadly.
-
-Output your analysis and list your RAG queries using:
-<TOOL>search_procedure: "your query"</TOOL>
-"""
-
-    planning = call_llm(planning_prompt, MODEL_PRO, 0.0, 3000, "ProcessAnalyst", tracer, thinking_budget=THINKING_BUDGET_LIGHT)
-    if not planning.success:
-        tracer.record("ProcessAnalyst", "LLM_FAIL", f"Planning call failed: {planning.error or 'Unknown'}")
-        return {"full_analysis": f"[Analysis failed: {planning.error}]", "process_path": "", "origination_method": "",
-                "procedure_sources": {}, "assessment_reasoning": "", "rag_query_count": 0}
-
-    # Step 2: Execute RAG — use agent's queries, NO hardcoded injection
-    tool_calls = parse_tool_calls(planning.text, "search_procedure")
-
-    agent_planned_queries = len(tool_calls)
-    if agent_planned_queries == 0:
-        tracer.record(
-            "ProcessAnalyst", "WARNING",
-            "Agent planned 0 RAG queries — retrying with explicit instruction"
-        )
-        retry_prompt = f"""You MUST search the Procedure document before making any determination.
-
-Based on this teaser, generate 3-5 search queries for the Procedure document.
-Each query should target a specific rule, threshold, or requirement.
-
-<TEASER_DOCUMENT>
-{teaser_text[:3000]}
-</TEASER_DOCUMENT>
-
-Output ONLY your queries, one per line, using this format:
-<TOOL>search_procedure: "your specific query"</TOOL>
-"""
-        retry = call_llm(retry_prompt, MODEL_FLASH, 0.0, 1000, "ProcessAnalyst", tracer, thinking_budget=THINKING_BUDGET_NONE)
-        tool_calls = parse_tool_calls(retry.text, "search_procedure")
-        tracer.record(
-            "ProcessAnalyst", "RETRY_RESULT",
-            f"Retry produced {len(tool_calls)} queries (original: {agent_planned_queries})"
-        )
-
-    procedure_results: dict[str, Any] = {}
-    for query in tool_calls[:7]:
-        tracer.record("ProcessAnalyst", "RAG_SEARCH", f"Agent-planned: {query[:60]}...")
-        result = search_procedure_fn(query, num_results=4)
-        procedure_results[query] = result
-
-    rag_context = format_rag_results(procedure_results)
-
-    analysis_prompt = f"""{pa_instr}
-
-## TEASER DOCUMENT
-
-{teaser_text}
-
-## YOUR INITIAL ANALYSIS
-
-{planning.text}
-
-## PROCEDURE SEARCH RESULTS
-
-{rag_context}
-
-## NOW: COMPLETE YOUR ANALYSIS
-
-Using the teaser AND the Procedure search results:
-1. Complete your data extraction
-2. Determine the assessment approach — cite the SPECIFIC Procedure thresholds from the search results
-3. Determine the origination method — cite the SPECIFIC Procedure criteria
-4. If the search results don't contain what you need, say so explicitly
-
-You MUST cite specific Procedure sections. Do NOT guess limits — only use values from the search results above.
-"""
-
-    final = call_llm(analysis_prompt, MODEL_PRO, 0.0, 16384, "ProcessAnalyst", tracer, thinking_budget=THINKING_BUDGET_STANDARD)
-    if not final.success:
-        tracer.record("ProcessAnalyst", "LLM_FAIL", f"Analysis call failed: {final.error or 'Unknown'}")
-        return {"full_analysis": f"[Analysis failed: {final.error}]", "process_path": "", "origination_method": "",
-                "procedure_sources": procedure_results, "assessment_reasoning": "", "rag_query_count": len(tool_calls)}
-
-    tracer.record("ProcessAnalyst", "ANALYSIS_DONE", f"Generated {len(final.text)} chars")
-
-    return {
-        "full_analysis": final.text,
-        "process_path": "",
-        "origination_method": "",
-        "procedure_sources": procedure_results,
-        "assessment_reasoning": "",
-        "origination_reasoning": "",
-    }
+    
+    return analyst.analyze_deal(teaser_text, use_native_tools)
 
 
 # =============================================================================
-# Dynamic Requirements Discovery (replaces static 28 fields)
+# Dynamic Requirements Discovery (CLASS-BASED)
 # =============================================================================
-
-REQUIREMENTS_DISCOVERY_PROMPT = """You are an analyst. Based on this deal analysis, the determined process path, and the governance document context below, identify ALL information requirements needed for the output document.
-
-## DEAL ANALYSIS
-{analysis_text}
-
-## PROCESS PATH
-Assessment Approach: {assessment_approach}
-Origination Method: {origination_method}
-
-## GOVERNANCE CONTEXT (from Procedure document)
-{procedure_rag_context}
-
-{governance_categories}
-
-## INSTRUCTIONS
-
-Identify requirements SPECIFIC to this deal. You MUST ground your requirements
-in the Procedure document context above:
-1. What does the Procedure say is required for THIS origination method / assessment approach?
-2. What additional information is needed given the deal's asset class and parties?
-3. What does the process path require? (More comprehensive = more data)
-4. What special features exist that trigger additional requirements?
-5. Only add fields beyond what the Procedure mandates if deal characteristics clearly require them.
-
-For EACH requirement, explain WHY it's needed for THIS specific deal.
-
-## OUTPUT FORMAT
-
-You MUST output ONLY valid JSON between XML tags, with NO other text:
-
-<json_output>
-[
-  {{
-    "category": "<category name from Procedure or deal analysis>",
-    "fields": [
-      {{
-        "id": 1,
-        "name": "<field name>",
-        "description": "<what this field captures>",
-        "why_required": "<why needed for THIS deal, citing Procedure if possible>",
-        "priority": "CRITICAL",
-        "typical_source": "teaser"
-      }}
-    ]
-  }}
-]
-</json_output>
-
-RULES:
-- Only include categories that apply to THIS deal
-- Only include fields that are needed for the determined process path
-- Every field must have a "why_required" explaining its relevance to THIS deal
-- Mark priority as CRITICAL (blocks assessment), IMPORTANT (needed for quality), or SUPPORTING (nice to have)
-- Do NOT include a fixed template — adapt to the deal
-- If Procedure context is available, use its categories and terminology
-
-CRITICAL:
-- Output ONLY the JSON array between <json_output></json_output> tags
-- NO markdown code fences like ```json
-- NO preambles or explanations
-- NO text before or after the tags
-
-NOW: Generate requirements for this specific deal in the exact format above.
-"""
-
 
 def discover_requirements(
     analysis_text: str,
@@ -739,102 +444,24 @@ def discover_requirements(
     governance_context: dict | None = None,
 ) -> list[dict]:
     """
-    Dynamically discover requirements based on deal analysis, process path,
-    and governance documents (via RAG).
-
-    Returns flat list of requirement dicts ready for the UI.
+    Dynamic requirements discovery — uses ProcessAnalyst class.
+    
+    Backward-compatible wrapper.
     """
+    from agents.process_analyst import ProcessAnalyst
+    
     if tracer is None:
         tracer = get_tracer()
-
-    tracer.record("RequirementsDiscovery", "START", "Discovering deal-specific requirements")
-
-    # --- RAG grounding: search Procedure for requirements specific to this path ---
-    procedure_rag_context = "(No Procedure context available — using general knowledge.)"
-    if search_procedure_fn:
-        om = origination_method or "assessment"
-        aa = assessment_approach or "assessment"
-        rag_queries = [
-            f"information requirements for {om}",
-            f"required data fields {aa} assessment",
-            f"what information must be provided for {om} origination",
-        ]
-        rag_results: dict[str, Any] = {}
-        rag_failures = 0
-        for query in rag_queries:
-            tracer.record("RequirementsDiscovery", "RAG_SEARCH", f"Procedure: {query[:60]}")
-            try:
-                rag_results[query] = search_procedure_fn(query, 3)
-            except Exception as e:
-                rag_failures += 1
-                logger.warning("Requirements RAG query failed: %s", e)
-        if rag_results:
-            procedure_rag_context = format_rag_results(rag_results)
-        # AG-M7: Warn if ALL RAG queries failed
-        if rag_failures == len(rag_queries):
-            procedure_rag_context += "\n\nWARNING: All RAG searches failed. Results may not be grounded in governance documents."
-            tracer.record("RequirementsDiscovery", "RAG_ALL_FAILED", f"All {rag_failures} queries failed")
-
-    # --- Inject governance-discovered categories if available ---
-    governance_categories = ""
-    if governance_context and governance_context.get("discovery_status") in ("complete", "partial"):
-        cats = governance_context.get("requirement_categories", [])
-        if cats:
-            governance_categories = (
-                "Known requirement categories from Procedure: " + ", ".join(cats)
-            )
-
-    prompt = REQUIREMENTS_DISCOVERY_PROMPT.format(
-        analysis_text=analysis_text[:8000],
-        assessment_approach=assessment_approach or "Not yet determined",
-        origination_method=origination_method or "Not yet determined",
-        procedure_rag_context=procedure_rag_context,
-        governance_categories=governance_categories,
+    
+    analyst = ProcessAnalyst(
+        search_procedure_fn=search_procedure_fn,
+        governance_context=governance_context,
+        tracer=tracer,
     )
-
-    result = call_llm(prompt, MODEL_PRO, 0.0, 5000, "RequirementsDiscovery", tracer, thinking_budget=THINKING_BUDGET_LIGHT)
-    if not result.success:
-        tracer.record("RequirementsDiscovery", "LLM_FAIL", f"LLM call failed: {result.error or 'Unknown'}")
-        return []
-
-    field_groups = safe_extract_json(result.text, "array")
-
-    if not field_groups:
-        tracer.record("RequirementsDiscovery", "PARSE_FAIL",
-                      "Could not parse requirements — human must define them")
-        return []
-
-    requirements = []
-    for group in field_groups:
-        category = group.get("category", "GENERAL")
-        for field in group.get("fields", []):
-            requirements.append({
-                "id": field.get("id", len(requirements) + 1),
-                "name": field.get("name", "Unknown"),
-                "description": field.get("description", ""),
-                "why_required": field.get("why_required", ""),
-                "priority": field.get("priority", "IMPORTANT"),
-                "typical_source": field.get("typical_source", "teaser"),
-                "category": category,
-                "status": "pending",
-                "value": "",
-                "source": "",
-                "evidence": "",
-                "suggestion_detail": "",
-            })
-
-    for i, req in enumerate(requirements):
-        req["id"] = i + 1
-
-    tracer.record(
-        "RequirementsDiscovery", "COMPLETE",
-        f"Discovered {len(requirements)} requirements across {len(field_groups)} categories"
-    )
-    return requirements
+    
+    return analyst.discover_requirements(analysis_text, assessment_approach, origination_method)
 
 
-# =============================================================================
-# =============================================================================
 # Phase 3: Agentic Compliance (CLASS-BASED)
 # =============================================================================
 
