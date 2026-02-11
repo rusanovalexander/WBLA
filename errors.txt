@@ -6,25 +6,36 @@
   iptrunner\script_runner.py:672 in code_to_exec
 
   C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-ui-refactor-and-tracing_v1\ui\app.py:52 in <module>
+  Omni\WBLA-feature-ui-refactor-and-tracing_v2\ui\app.py:225 in <module>
 
-     49 │   create_process_analyst_responder,
-     50 │   create_compliance_advisor_responder,
-     51 )
-  ❱  52 from core.tracing import TraceStore, set_tracer
-     53 from core.llm_client import call_llm, call_llm_streaming, call_llm_with_backof
-     54 from core.orchestration import (
-     55 │   run_agentic_analysis,
+    222 # UI module imports
+    223 from ui.utils.session_state import init_state, get_tracer, advance_phase
+    224 from ui.components.sidebar import render_sidebar
+  ❱ 225 from ui.phases import (
+    226 │   render_phase_setup,
+    227 │   render_phase_analysis,
+    228 │   render_phase_process_gaps,
 
   C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
-  Omni\WBLA-feature-ui-refactor-and-tracing_v1\core\tracing\__init__.py:9 in <module>
+  Omni\WBLA-feature-ui-refactor-and-tracing_v2\ui\phases\__init__.py:12 in <module>
 
-     6 - VertexTraceManager: Persistent Vertex AI Trace integration (new)
-     7 """
-     8
-  ❱  9 from .trace_store import TraceStore, set_tracer, get_tracer
-    10
-    11 # Import Vertex AI tracing only if available
-    12 try:
+     9 from .process_gaps import render_phase_process_gaps
+    10 from .compliance import render_phase_compliance
+    11 from .drafting import render_phase_drafting
+  ❱ 12 from .complete import render_phase_complete
+    13
+    14 __all__ = [
+    15 │   "render_phase_setup",
+
+  C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project
+  Omni\WBLA-feature-ui-refactor-and-tracing_v2\ui\phases\complete.py:14 in <module>
+
+    11 from config.settings import PRODUCT_NAME
+    12 from ui.components.agent_dashboard import render_agent_dashboard
+    13 from ui.utils.session_state import get_tracer
+  ❱ 14 from tools.export_utils import generate_docx, generate_audit_trail
+    15
+    16
+    17 def render_phase_complete():
 ────────────────────────────────────────────────────────────────────────────────────────
-ModuleNotFoundError: No module named 'core.tracing.trace_store'
+ModuleNotFoundError: No module named 'tools.export_utils'
