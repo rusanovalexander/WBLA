@@ -161,10 +161,11 @@ def _extract_structured_decision(
             # AG-H4: Validate through Pydantic if decision found
             if parsed.get("decision_found"):
                 try:
+                    # Ensure None values get replaced with defaults (LLM sometimes returns None)
                     validated = ProcessDecision.model_validate({
-                        "assessment_approach": parsed.get("assessment_approach", "Unknown"),
-                        "origination_method": parsed.get("origination_method", "Unknown"),
-                        "procedure_section": parsed.get("procedure_section", ""),
+                        "assessment_approach": parsed.get("assessment_approach") or "Unknown",
+                        "origination_method": parsed.get("origination_method") or "Unknown",
+                        "procedure_section": parsed.get("procedure_section") or "",
                     })
                     parsed["assessment_approach"] = validated.assessment_approach
                     parsed["origination_method"] = validated.origination_method
