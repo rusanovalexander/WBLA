@@ -691,6 +691,19 @@ def call_llm_with_tools(
     if all_text_parts:
         final_text = "\n".join(all_text_parts)
         total_tokens_out = estimate_tokens(final_text)
+
+        # Record LLM_RESPONSE for call count tracking
+        from core.tracing import estimate_cost
+        tracer.record(
+            agent_name,
+            "LLM_RESPONSE",
+            f"Generated {len(final_text)} chars via tool calling",
+            tokens_in=total_tokens_in,
+            tokens_out=total_tokens_out,
+            cost_usd=estimate_cost(model, total_tokens_in, total_tokens_out),
+            model=model,
+        )
+
         return LLMCallResult(
             text=final_text,
             model=model,
