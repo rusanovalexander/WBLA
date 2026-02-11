@@ -277,3 +277,325 @@ writer_config = {
     "temperature": AGENT_TEMPERATURES["writer"],
     "tools": ["tool_load_document"],
 }
+# This will be appended to agents/writer.py
+
+# =============================================================================
+# Writer Class (NEW - Phase 1.3 Consolidation)
+# =============================================================================
+
+"""
+Writer consolidates document drafting logic:
+- StructureGen (section structure generation)
+- Section drafting
+
+Single entry point: generate_structure() + draft_section()
+"""
+
+import logging
+from typing import Any, Callable
+from config.settings import MODEL_PRO, MODEL_FLASH, AGENT_MODELS, THINKING_BUDGET_NONE, THINKING_BUDGET_LIGHT, THINKING_BUDGET_STANDARD
+from core.llm_client import call_llm, call_llm_streaming
+from core.tracing import TraceStore, get_tracer
+from core.parsers import format_rag_results, format_requirements_for_context, safe_extract_json
+from models.schemas import SectionDraft
+import json
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Structure Generation Prompt
+# =============================================================================
+
+STRUCTURE_GENERATION_PROMPT = """Determine the section structure for this {product_name}.
+
+## PROCESS PATH
+Assessment Approach: {assessment_approach}
+Origination Method: {origination_method}
+
+## PROCEDURE CONTEXT
+{procedure_sections_context}
+
+{gov_sections_str}
+
+## DEAL ANALYSIS
+{analysis_text}
+
+## EXAMPLE STRUCTURE (adapt as needed)
+{example_sections}
+
+## TASK
+Output ONLY valid JSON with section structure:
+
+<json_output>
+{{
+  "sections": [
+    {{
+      "name": "Section Name",
+      "description": "What this section covers",
+      "detail_level": "Standard"
+    }}
+  ]
+}}
+</json_output>
+
+Rules:
+- Adapt sections to this specific deal and process path
+- Use Procedure context for required sections
+- Include 4-8 sections minimum
+- Output ONLY JSON between tags
+"""
+
+
+class Writer:
+    """
+    Writer Agent - handles document structure generation and section drafting.
+    """
+
+    def __init__(
+        self,
+        search_procedure_fn: Callable | None = None,
+        governance_context: dict[str, Any] | None = None,
+        agent_bus: Any = None,
+        tracer: TraceStore | None = None,
+    ):
+        self.search_procedure_fn = search_procedure_fn
+        self.governance_context = governance_context
+        self.agent_bus = agent_bus
+        self.tracer = tracer or get_tracer()
+        self.instruction = get_writer_instruction(governance_context)
+
+    def generate_structure(
+        self,
+        example_text: str,
+        assessment_approach: str,
+        origination_method: str,
+        analysis_text: str,
+    ) -> list[dict]:
+        """Generate document section structure."""
+        self.tracer.record("Writer", "START_STRUCTURE", f"Generating structure for {origination_method}")
+
+        # RAG search for section requirements
+        procedure_sections_context = self._search_procedure_for_sections(
+            origination_method, assessment_approach
+        )
+
+        # Governance templates
+        gov_sections_str = self._build_governance_sections_hint(origination_method)
+
+        # Extract example sections
+        example_sections = self._extract_example_sections(example_text)
+
+        # Generate structure
+        from config.settings import PRODUCT_NAME
+        prompt = STRUCTURE_GENERATION_PROMPT.format(
+            product_name=PRODUCT_NAME,
+            assessment_approach=assessment_approach or "assessment",
+            origination_method=origination_method or "document",
+            procedure_sections_context=procedure_sections_context,
+            gov_sections_str=gov_sections_str,
+            analysis_text=analysis_text[:2000],
+            example_sections=example_sections,
+        )
+
+        result = call_llm(
+            prompt, MODEL_PRO, 0.0, 4000,
+            "Writer", self.tracer,
+            thinking_budget=THINKING_BUDGET_LIGHT
+        )
+
+        if not result.success:
+            self.tracer.record("Writer", "STRUCTURE_FAIL", result.error or "Unknown")
+            return []
+
+        parsed = safe_extract_json(result.text, "object")
+        if parsed and "sections" in parsed:
+            sections = parsed["sections"]
+            if isinstance(sections, list):
+                self.tracer.record("Writer", "STRUCTURE_COMPLETE", f"Generated {len(sections)} sections")
+                return sections
+
+        # Retry with simplified prompt
+        self.tracer.record("Writer", "STRUCTURE_RETRY", "First attempt failed")
+        retry_result = call_llm(
+            "Generate section structure as JSON array with name, description fields",
+            MODEL_FLASH, 0.0, 3000,
+            "Writer", self.tracer,
+            thinking_budget=THINKING_BUDGET_NONE
+        )
+
+        if retry_result.success:
+            retry_parsed = safe_extract_json(retry_result.text, "array")
+            if retry_parsed:
+                return retry_parsed
+
+        return []
+
+    def draft_section(
+        self,
+        section: dict[str, str],
+        context: dict[str, Any],
+    ) -> SectionDraft:
+        """Draft a document section."""
+        section_name = section.get("name", "Section")
+        self.tracer.record("Writer", "START_DRAFT", f"Drafting: {section_name}")
+
+        # Extract context
+        teaser_text = context.get("teaser_text", "")
+        example_text = context.get("example_text", "")
+        extracted_data = context.get("extracted_data", "")
+        compliance_result = context.get("compliance_result", "")
+        requirements = context.get("requirements", [])
+        supplement_texts = context.get("supplement_texts", {})
+        previously_drafted = context.get("previously_drafted", "")
+
+        # Format requirements
+        filled_context = format_requirements_for_context(
+            requirements if isinstance(requirements, list) else []
+        )
+
+        # Format supplements
+        supplement_context = ""
+        if supplement_texts:
+            for fname, ftext in supplement_texts.items():
+                supplement_context += f"\n### Supplementary: {fname}\n{ftext[:3000]}\n"
+
+        # Previously drafted
+        previously_context = ""
+        if previously_drafted:
+            previously_context = f"""
+### Previously Drafted Sections:
+{previously_drafted[:6000]}
+"""
+
+        # Build prompt
+        prompt = f"""{self.instruction}
+
+## SECTION TO DRAFT: {section_name}
+
+Description: {section.get('description', '')}
+Detail Level: {section.get('detail_level', 'Standard')}
+
+## COMPLETE CONTEXT
+
+### Teaser Document:
+{teaser_text}
+
+### Extracted Data Analysis:
+{extracted_data}
+
+### Filled Requirements:
+{filled_context}
+
+### Compliance Assessment:
+{compliance_result}
+
+{f"### Supplementary Documents:{supplement_context}" if supplement_context else ""}
+
+{previously_context}
+
+### Example Document (STYLE REFERENCE ONLY):
+{example_text}
+
+## DRAFT THIS SECTION
+
+Remember:
+- Use example for STYLE only
+- ALL facts from teaser/data/compliance
+- Mark missing info as **[INFORMATION REQUIRED: description]**
+- Be precise with figures and dates
+- Use ## and ### for sub-headings
+- Do NOT repeat previously drafted content
+"""
+
+        result = call_llm_streaming(
+            prompt=prompt,
+            model=AGENT_MODELS.get("writer", MODEL_PRO),
+            temperature=0.3,
+            max_tokens=8000,
+            agent_name="Writer",
+            tracer=self.tracer,
+            thinking_budget=THINKING_BUDGET_STANDARD,
+        )
+
+        if not result.success:
+            content = f"[Section drafting failed: {result.error}]"
+            self.tracer.record("Writer", "DRAFT_FAIL", result.error or "Unknown")
+        else:
+            content = result.text
+            self.tracer.record("Writer", "DRAFT_COMPLETE", f"Drafted {len(content)} chars")
+
+        return SectionDraft(
+            section_name=section_name,
+            content=content,
+            word_count=len(content.split()),
+            requires_review=("[INFORMATION REQUIRED" in content or "[TO BE VERIFIED" in content),
+        )
+
+    def _search_procedure_for_sections(
+        self, origination_method: str, assessment_approach: str
+    ) -> str:
+        """Search Procedure for section requirements."""
+        if not self.search_procedure_fn:
+            return "(No Procedure context)"
+
+        om = origination_method or "document"
+        aa = assessment_approach or "assessment"
+
+        rag_queries = [
+            f"required sections for {om} document",
+            f"content structure {om} origination method",
+            f"section requirements {aa} assessment approach",
+        ]
+
+        rag_results: dict[str, Any] = {}
+        for query in rag_queries:
+            self.tracer.record("Writer", "RAG_SEARCH", f"Proc: {query[:60]}")
+            try:
+                rag_results[query] = self.search_procedure_fn(query, 3)
+            except Exception as e:
+                logger.warning("Structure RAG query failed: %s", e)
+
+        return format_rag_results(rag_results) if rag_results else "(No results)"
+
+    def _build_governance_sections_hint(self, origination_method: str) -> str:
+        """Build governance section templates hint."""
+        if not self.governance_context:
+            return ""
+
+        if self.governance_context.get("discovery_status") not in ("complete", "partial"):
+            return ""
+
+        templates = self.governance_context.get("section_templates", {})
+        om_key = origination_method or ""
+
+        # Try exact match first
+        matched_template = templates.get(om_key)
+        if not matched_template:
+            # Try partial match
+            for key, val in templates.items():
+                if key.lower() in om_key.lower() or om_key.lower() in key.lower():
+                    matched_template = val
+                    break
+
+        if matched_template:
+            return f"Procedure-defined sections for '{om_key}': " + json.dumps(matched_template, indent=2)
+
+        return ""
+
+    def _extract_example_sections(self, example_text: str) -> str:
+        """Extract section names from example document."""
+        if not example_text:
+            return "(No example)"
+
+        # Simple extraction: look for markdown headers
+        lines = example_text.split('\n')
+        sections = []
+        for line in lines[:100]:  # First 100 lines
+            if line.startswith('# ') or line.startswith('## '):
+                sections.append(line.strip('# ').strip())
+
+        if sections:
+            return "Example sections: " + ", ".join(sections[:10])
+
+        return "(No clear section structure in example)"

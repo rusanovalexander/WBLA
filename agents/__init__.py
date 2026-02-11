@@ -11,7 +11,7 @@ Multi-agent system:
 from .orchestrator import orchestrator_config, ORCHESTRATOR_INSTRUCTION, get_orchestrator_instruction
 from .process_analyst import process_analyst_config, PROCESS_ANALYST_INSTRUCTION, get_process_analyst_instruction, ProcessAnalyst
 from .compliance_advisor import compliance_advisor_config, COMPLIANCE_ADVISOR_INSTRUCTION, get_compliance_advisor_instruction, ComplianceAdvisor
-from .writer import writer_config, WRITER_INSTRUCTION, get_writer_instruction
+from .writer import writer_config, WRITER_INSTRUCTION, get_writer_instruction, Writer
 from .level3 import (
     AgentCommunicationBus,
     create_process_analyst_responder,
@@ -29,7 +29,7 @@ __all__ = [
     "orchestrator_config", "ORCHESTRATOR_INSTRUCTION", "get_orchestrator_instruction",
     "process_analyst_config", "PROCESS_ANALYST_INSTRUCTION", "get_process_analyst_instruction", "ProcessAnalyst",
     "compliance_advisor_config", "COMPLIANCE_ADVISOR_INSTRUCTION", "get_compliance_advisor_instruction", "ComplianceAdvisor",
-    "writer_config", "WRITER_INSTRUCTION", "get_writer_instruction",
+    "writer_config", "WRITER_INSTRUCTION", "get_writer_instruction", "Writer",
     "AGENT_CONFIGS",
     "AgentCommunicationBus",
     "create_process_analyst_responder",

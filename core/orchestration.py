@@ -666,143 +666,23 @@ def generate_section_structure(
     governance_context: dict | None = None,
 ) -> list[dict]:
     """
-    Generate document section structure adapted to process path and deal type.
-    Now grounded in Procedure document via RAG.
+    Generate document section structure - uses Writer class.
+    
+    Backward-compatible wrapper.
     """
+    from agents.writer import Writer
+    
     if tracer is None:
         tracer = get_tracer()
+    
+    writer = Writer(
+        search_procedure_fn=search_procedure_fn,
+        governance_context=governance_context,
+        tracer=tracer,
+    )
+    
+    return writer.generate_structure(example_text, assessment_approach, origination_method, analysis_text)
 
-    tracer.record("StructureGen", "START", f"Generating structure for {origination_method}")
-
-    # --- RAG grounding: search Procedure for section requirements ---
-    procedure_sections_context = "(No Procedure context available — using general knowledge.)"
-    if search_procedure_fn:
-        om = origination_method or "document"
-        aa = assessment_approach or "assessment"
-        rag_queries = [
-            f"required sections for {om} document",
-            f"content structure {om} origination method",
-            f"section requirements {aa} assessment approach",
-        ]
-        rag_results: dict[str, Any] = {}
-        rag_failures = 0
-        for query in rag_queries:
-            tracer.record("StructureGen", "RAG_SEARCH", f"Procedure: {query[:60]}")
-            try:
-                rag_results[query] = search_procedure_fn(query, 3)
-            except Exception as e:
-                rag_failures += 1
-                logger.warning("Structure RAG query failed: %s", e)
-        if rag_results:
-            procedure_sections_context = format_rag_results(rag_results)
-        # AG-M7: Warn if ALL RAG queries failed
-        if rag_failures == len(rag_queries):
-            procedure_sections_context += "\n\nWARNING: All RAG searches failed. Section structure may not match governance requirements."
-            tracer.record("StructureGen", "RAG_ALL_FAILED", f"All {rag_failures} queries failed")
-
-    # --- Inject governance-discovered section templates if available ---
-    gov_sections_str = ""
-    if governance_context and governance_context.get("discovery_status") in ("complete", "partial"):
-        templates = governance_context.get("section_templates", {})
-        om_key = origination_method or ""
-        # Try exact match first, then partial match
-        matched_template = templates.get(om_key)
-        if not matched_template:
-            for key, val in templates.items():
-                if key.lower() in om_key.lower() or om_key.lower() in key.lower():
-                    matched_template = val
-                    break
-        if matched_template:
-            gov_sections_str = (
-                f"Procedure-defined sections for '{om_key}': "
-                + json.dumps(matched_template, indent=2)
-            )
-
-    prompt = f"""Determine the section structure for this {PRODUCT_NAME}.
-
-## PROCESS PATH
-Assessment Approach: {assessment_approach}
-Origination Method: {origination_method}
-
-## PROCEDURE CONTEXT (from governance documents)
-{procedure_sections_context}
-
-{gov_sections_str}
-
-## DEAL ANALYSIS (excerpt)
-{analysis_text[:3000]}
-
-## EXAMPLE DOCUMENT (for reference)
-{example_text[:5000] if example_text else "(No example provided)"}
-
-## INSTRUCTIONS
-
-Design the section structure for THIS specific {PRODUCT_NAME}:
-
-1. **Use the Procedure document above as primary guide:**
-   - If the Procedure specifies required sections for this origination method, use those
-   - The Procedure determines both the NUMBER of sections and their NAMES
-   - Only deviate from the Procedure if the deal has unusual features not covered
-
-2. **If the Procedure does not specify sections**, judge scope from the origination method name
-   (more comprehensive origination = more sections, condensed = fewer)
-
-3. **Adapt section content to the specific deal characteristics** found in the analysis
-
-4. **Use the example for style reference, not as a rigid template**
-
-## OUTPUT FORMAT
-
-Return a JSON array:
-```json
-[{{"name": "Section Name", "description": "What this section covers for THIS deal", "detail_level": "Detailed|Standard|Brief"}}]
-```
-
-Return ONLY the JSON array.
-"""
-
-    result = call_llm(prompt, MODEL_PRO, 0.0, 4000, "StructureGen", tracer, thinking_budget=THINKING_BUDGET_LIGHT)
-    if not result.success:
-        tracer.record("StructureGen", "LLM_FAIL", f"Structure generation failed: {result.error or 'Unknown'}")
-        return []
-
-    sections = safe_extract_json(result.text, "array")
-
-    if sections and len(sections) >= 2:
-        tracer.record("StructureGen", "COMPLETE", f"Generated {len(sections)} sections")
-        return sections
-
-    # AG-1: Retry with simplified prompt using MODEL_FLASH at temperature 0.0
-    tracer.record("StructureGen", "RETRY", "First attempt failed JSON extraction — retrying with simplified prompt")
-    logger.warning("Section structure first attempt failed, retrying with MODEL_FLASH")
-
-    retry_prompt = f"""Generate a JSON array of {PRODUCT_NAME} sections for this deal.
-
-Assessment Approach: {assessment_approach}
-Origination Method: {origination_method}
-
-Deal excerpt: {analysis_text[:2000]}
-
-Return ONLY a valid JSON array. Each element must have "name", "description", and "detail_level" fields.
-Example: [{{"name": "Executive Summary", "description": "Overview of the deal", "detail_level": "Standard"}}]
-
-Return ONLY the JSON array, no other text.
-"""
-    retry_result = call_llm(retry_prompt, MODEL_FLASH, 0.0, 3000, "StructureGen", tracer, thinking_budget=THINKING_BUDGET_NONE)
-    retry_sections = safe_extract_json(retry_result.text, "array")
-
-    if retry_sections and len(retry_sections) >= 2:
-        tracer.record("StructureGen", "RETRY_SUCCESS", f"Retry generated {len(retry_sections)} sections")
-        return retry_sections
-
-    tracer.record("StructureGen", "PARSE_FAIL", "Could not generate section structure after 2 attempts")
-    logger.error("Section structure generation failed after retry. Last output: %s", retry_result.text[:500])
-    return []
-
-
-# =============================================================================
-# Section Drafting with Agent Communication
-# =============================================================================
 
 def draft_section(
     section: dict[str, str],
@@ -811,189 +691,25 @@ def draft_section(
     tracer: TraceStore | None = None,
     governance_context: dict[str, Any] | None = None,
 ) -> SectionDraft:
-    """Draft a document section with full context."""
+    """
+    Draft a document section - uses Writer class.
+    
+    Backward-compatible wrapper.
+    """
+    from agents.writer import Writer
+    
     if tracer is None:
         tracer = get_tracer()
-
-    section_name = section.get("name", "Section")
-    tracer.record("Writer", "START", f"Drafting: {section_name}")
-
-    teaser_text = context.get("teaser_text", "")
-    example_text = context.get("example_text", "")
-    extracted_data = context.get("extracted_data", "")
-    compliance_result = context.get("compliance_result", "")
-    requirements = context.get("requirements", [])
-    supplement_texts = context.get("supplement_texts", {})
-    previously_drafted = context.get("previously_drafted", "")
-
-    filled_context = format_requirements_for_context(
-        requirements if isinstance(requirements, list) else []
+    
+    writer = Writer(
+        search_procedure_fn=context.get("search_procedure_fn"),
+        governance_context=governance_context,
+        agent_bus=agent_bus,
+        tracer=tracer,
     )
+    
+    return writer.draft_section(section, context)
 
-    supplement_context = ""
-    if supplement_texts:
-        for fname, ftext in supplement_texts.items():
-            supplement_context += f"\n### Supplementary: {fname}\n{ftext[:3000]}\n"
-
-    previously_context = ""
-    if previously_drafted:
-        previously_context = f"""
-### Previously Drafted Sections (for consistency — do NOT repeat their content):
-{previously_drafted[:6000]}
-"""
-
-    writer_instr = get_writer_instruction(governance_context)
-
-    prompt = f"""{writer_instr}
-
-## SECTION TO DRAFT: {section_name}
-
-Description: {section.get('description', '')}
-Detail Level: {section.get('detail_level', 'Standard')}
-
-## COMPLETE CONTEXT
-
-### Teaser Document (FULL — use for ALL facts):
-{teaser_text}
-
-### Extracted Data Analysis (FULL):
-{extracted_data}
-
-### Filled Requirements:
-{filled_context}
-
-### Compliance Assessment (FULL):
-{compliance_result}
-
-{f"### Supplementary Documents:{supplement_context}" if supplement_context else ""}
-
-{previously_context}
-
-### Example Document (STYLE REFERENCE ONLY — never copy facts):
-{example_text}
-
-## NOW: DRAFT THIS SECTION
-
-Remember:
-- Use example for STYLE and STRUCTURE only
-- ALL facts from teaser/data/compliance — never from example
-- Mark missing info as **[INFORMATION REQUIRED: description]**
-- Be precise: exact figures, full names, specific dates
-- Use ## and ### for sub-headings WITHIN this section (not # which is reserved for section titles)
-- Do NOT repeat content already covered in previously drafted sections
-"""
-
-    result = call_llm_streaming(
-        prompt, MODEL_PRO, 0.3, 8000, "Writer", tracer=tracer, thinking_budget=THINKING_BUDGET_STANDARD
-    )
-    if not result.success:
-        tracer.record("Writer", "LLM_FAIL", f"Drafting call failed: {result.error or 'Unknown'}")
-
-    agent_queries_used: list[AgentMessage] = []
-    if agent_bus:
-        queries = parse_agent_queries(result.text)
-        for q in queries:
-            tracer.record("Writer", "AGENT_QUERY", f"→ {q['to']}: {q['query'][:60]}...")
-            response = agent_bus.query("Writer", q["to"], q["query"], context)
-            agent_queries_used.append(AgentMessage(
-                from_agent="Writer",
-                to_agent=q["to"],
-                query=q["query"],
-                response=response[:500],
-            ))
-
-        # AG-F1: Feed agent responses back into a refinement call
-        if agent_queries_used:
-            tracer.record("Writer", "REFINEMENT", f"Refining draft with {len(agent_queries_used)} agent responses")
-            agent_responses_text = "\n\n".join(
-                f"**From {aq.to_agent}** (re: {aq.query[:80]}):\n{aq.response}"
-                for aq in agent_queries_used
-            )
-            refinement_prompt = f"""{writer_instr}
-
-## SECTION TO REFINE: {section_name}
-
-## YOUR INITIAL DRAFT
-{result.text[:6000]}
-
-## AGENT RESPONSES TO YOUR QUERIES
-{agent_responses_text}
-
-## INSTRUCTIONS
-Refine your draft by incorporating the information from the agent responses above.
-- Integrate the new information naturally into the section
-- Keep the same structure and style
-- Output ONLY the refined section text — no metadata or thinking
-"""
-            refined = call_llm_streaming(
-                refinement_prompt, MODEL_PRO, 0.2, 8000, "Writer", tracer=tracer, thinking_budget=THINKING_BUDGET_STANDARD
-            )
-            if refined.success and len(refined.text.strip()) > 100:
-                tracer.record("Writer", "REFINEMENT_OK", f"Refined draft: {len(refined.text)} chars")
-                result = refined
-            else:
-                tracer.record("Writer", "REFINEMENT_SKIP", "Refinement output insufficient, using original")
-
-    draft_content = result.text
-    if "### 📝 DRAFTED SECTION" in draft_content:
-        parts = draft_content.split("### 📝 DRAFTED SECTION")
-        if len(parts) > 1:
-            section_part = parts[1]
-            if "### 📋 SECTION METADATA" in section_part:
-                section_part = section_part.split("### 📋 SECTION METADATA")[0]
-            draft_content = section_part.strip()
-
-    # AG-3: Validate Writer output — retry if content is too short or missing
-    min_content_length = 100  # Minimum chars for a valid section draft
-    if len(draft_content.strip()) < min_content_length:
-        tracer.record(
-            "Writer", "VALIDATION_FAIL",
-            f"Draft too short ({len(draft_content.strip())} chars < {min_content_length}). Retrying with focused prompt."
-        )
-        logger.warning("Writer output validation failed for '%s' — retrying", section_name)
-
-        retry_prompt = f"""Draft ONLY the section content for "{section_name}".
-
-Description: {section.get('description', '')}
-
-Use ONLY the following data sources:
-
-Teaser: {teaser_text[:4000]}
-
-Extracted Data: {extracted_data[:3000]}
-
-Requirements: {filled_context[:2000]}
-
-INSTRUCTIONS:
-- Write the section content directly — no metadata, no thinking process
-- Use exact figures and names from the data sources
-- Mark missing information as **[INFORMATION REQUIRED: description]**
-- Output ONLY the section text
-"""
-        retry_result = call_llm_streaming(
-            retry_prompt, MODEL_PRO, 0.2, 6000, "Writer", tracer=tracer, thinking_budget=THINKING_BUDGET_STANDARD
-        )
-        retry_content = retry_result.text.strip()
-
-        if len(retry_content) >= min_content_length:
-            tracer.record("Writer", "RETRY_SUCCESS", f"Retry produced {len(retry_content)} chars")
-            draft_content = retry_content
-        else:
-            tracer.record("Writer", "RETRY_FAILED", f"Retry also too short ({len(retry_content)} chars)")
-            logger.error("Writer retry also failed for '%s'", section_name)
-
-    tracer.record("Writer", "COMPLETE", f"Drafted: {section_name} ({len(draft_content)} chars)")
-
-    return SectionDraft(
-        name=section_name,
-        content=draft_content,
-        agent_queries=agent_queries_used,
-    )
-
-
-# =============================================================================
-# Process Decision Lock
-# =============================================================================
 
 def create_process_decision(
     process_path: str,
