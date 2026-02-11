@@ -161,10 +161,11 @@ def _extract_structured_decision(
             # AG-H4: Validate through Pydantic if decision found
             if parsed.get("decision_found"):
                 try:
+                    # Ensure None values get replaced with defaults (LLM sometimes returns None)
                     validated = ProcessDecision.model_validate({
-                        "assessment_approach": parsed.get("assessment_approach", "Unknown"),
-                        "origination_method": parsed.get("origination_method", "Unknown"),
-                        "procedure_section": parsed.get("procedure_section", ""),
+                        "assessment_approach": parsed.get("assessment_approach") or "Unknown",
+                        "origination_method": parsed.get("origination_method") or "Unknown",
+                        "procedure_section": parsed.get("procedure_section") or "",
                     })
                     parsed["assessment_approach"] = validated.assessment_approach
                     parsed["origination_method"] = validated.origination_method
@@ -227,16 +228,22 @@ def _extract_compliance_checks(
             validated_checks = []
             for check_data in parsed:
                 try:
-                    # Pre-process: convert null reference to empty string
-                    if isinstance(check_data, dict) and check_data.get("reference") is None:
-                        check_data["reference"] = ""
+                    # Pre-process: convert null values to defaults
+                    if isinstance(check_data, dict):
+                        if check_data.get("reference") is None:
+                            check_data["reference"] = ""
+                        if check_data.get("severity") is None:
+                            check_data["severity"] = "MUST"
                     validated = ComplianceCheck.model_validate(check_data)
                     validated_checks.append(validated.model_dump())
                 except Exception as e:
                     logger.warning("Pydantic validation failed for ComplianceCheck: %s", e)
                     # Pre-process before adding raw data
-                    if isinstance(check_data, dict) and check_data.get("reference") is None:
-                        check_data["reference"] = ""
+                    if isinstance(check_data, dict):
+                        if check_data.get("reference") is None:
+                            check_data["reference"] = ""
+                        if check_data.get("severity") is None:
+                            check_data["severity"] = "MUST"
                     validated_checks.append(check_data)  # Keep raw if validation fails
             tracer.record("Extraction", "SUCCESS", f"Extracted {len(validated_checks)} checks")
             return validated_checks
@@ -261,15 +268,21 @@ def _extract_compliance_checks(
                 validated_checks = []
                 for check_data in tail_parsed:
                     try:
-                        # Pre-process: convert null reference to empty string
-                        if isinstance(check_data, dict) and check_data.get("reference") is None:
-                            check_data["reference"] = ""
+                        # Pre-process: convert null values to defaults
+                        if isinstance(check_data, dict):
+                            if check_data.get("reference") is None:
+                                check_data["reference"] = ""
+                            if check_data.get("severity") is None:
+                                check_data["severity"] = "MUST"
                         validated = ComplianceCheck.model_validate(check_data)
                         validated_checks.append(validated.model_dump())
                     except Exception:
                         # Pre-process before adding raw data
-                        if isinstance(check_data, dict) and check_data.get("reference") is None:
-                            check_data["reference"] = ""
+                        if isinstance(check_data, dict):
+                            if check_data.get("reference") is None:
+                                check_data["reference"] = ""
+                            if check_data.get("severity") is None:
+                                check_data["severity"] = "MUST"
                         validated_checks.append(check_data)
                 tracer.record("Extraction", "CHUNK_SUCCESS", f"Tail extraction got {len(validated_checks)} checks")
                 return validated_checks

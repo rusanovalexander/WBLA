@@ -149,6 +149,22 @@ REQUIRE_APPROVAL = os.getenv("REQUIRE_APPROVAL", "true").lower() == "true"
 MAX_CONTEXT_TOKENS = 100_000
 
 # =============================================================================
+# Vertex AI Trace Configuration
+# =============================================================================
+
+# Enable persistent trace logging to Google Cloud Trace
+# Traces can be viewed in Cloud Console: https://console.cloud.google.com/traces
+ENABLE_VERTEX_TRACE = os.getenv("ENABLE_VERTEX_TRACE", "false").lower() == "true"
+
+# Trace sampling rate (0.0 = disabled, 1.0 = trace everything)
+# Recommended: 1.0 for dev/staging, 0.1-0.5 for production (cost optimization)
+TRACE_SAMPLING_RATE = float(os.getenv("TRACE_SAMPLING_RATE", "1.0"))
+
+# Enable local trace fallback when Vertex AI Trace is unavailable
+# (uses in-memory TraceStore instead)
+TRACE_FALLBACK_ENABLED = True
+
+# =============================================================================
 # Thinking Budget Configuration (gemini-2.5-pro/flash thinking control)
 # =============================================================================
 # 128 = minimum for gemini-2.5-pro (cannot disable thinking)
