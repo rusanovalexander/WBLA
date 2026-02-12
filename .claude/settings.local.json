@@ -50,7 +50,14 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nFix: Move trace_store.py into tracing package\n\nIssue: ModuleNotFoundError when importing from core.tracing\n- core/tracing.py was a single file, not a package directory\n- Phase 2 created core/tracing/ as a package but didn''t move the original file\n\nSolution:\n- Renamed core/tracing.py -> core/tracing/trace_store.py\n- Updated core/tracing/__init__.py to export estimate_tokens\n- All imports from core.tracing now work correctly\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(grep:*)",
       "Bash(xargs:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git rm:*)",
+      "Bash(git stash:*)",
+      "Bash(git mv:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nFix: ModuleNotFoundError for trace_store import\n\nFixed incorrect import path:\n- Wrong: from core.trace_store import get_tracer, TraceStore\n- Correct: from core.tracing import get_tracer, TraceStore\n\nThe trace_store module is located in core/tracing/trace_store.py\nand should be imported via the core.tracing package.\n\nError fixed:\n  ModuleNotFoundError: No module named ''core.trace_store''\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nFix: Add setup_environment\\(\\) call to chat_app.py\n\nCRITICAL FIX: chat_app.py was missing setup_environment\\(\\) call,\ncausing Google Cloud credentials to not be loaded.\n\nRoot cause:\n- app.py calls setup_environment\\(\\) on line 33\n- chat_app.py did NOT call it\n- setup_environment\\(\\) sets GOOGLE_APPLICATION_CREDENTIALS env var\n- Without this, google.auth.default\\(\\) fails with DefaultCredentialsError\n\nFix:\n- Import setup_environment from config.settings\n- Call it BEFORE importing ConversationalOrchestrator\n- Must be called before any Google Cloud SDK initialization\n\nThis explains why app.py worked but chat_app.py didn''t with credentials.\n\nError fixed:\n  DefaultCredentialsError: Your default credentials were not found.\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(dir \"C:\\\\Users\\\\Aleksandr Rusanov\\\\Downloads\\\\refactored_FINAL_FIXED\\\\data\\\\examples\" /B)"
     ]
   }
 }

@@ -360,6 +360,157 @@ def test_rag_connection() -> Dict[str, Any]:
 
 
 # =============================================================================
+# Example Credit Pack Search (Local File Search)
+# =============================================================================
+
+def tool_search_examples(
+    query: str,
+    num_results: int = 3,
+    examples_folder: str = None
+) -> dict[str, Any]:
+    """
+    Search example credit pack files in data/examples folder.
+
+    This does NOT use Vertex AI Search - it's a local file search.
+
+    Args:
+        query: Search query (e.g., "commercial real estate", "infrastructure")
+        num_results: Max number of examples to return
+        examples_folder: Path to examples folder (defaults to data/examples)
+
+    Returns:
+        {
+            "status": "OK" | "ERROR",
+            "num_results": int,
+            "results": [
+                {
+                    "filename": str,
+                    "title": str,  # Extracted from filename
+                    "sector": str,  # Guessed from filename/content
+                    "content_preview": str,  # First 500 chars
+                    "relevance_score": float,  # Simple keyword matching score
+                },
+                ...
+            ],
+            "query": str
+        }
+    """
+
+    if examples_folder is None:
+        from config.settings import EXAMPLES_FOLDER
+        examples_folder = EXAMPLES_FOLDER
+
+    examples_path = Path(examples_folder)
+
+    if not examples_path.exists():
+        logger.warning(f"Examples folder not found: {examples_folder}")
+        return {
+            "status": "ERROR",
+            "error": f"Examples folder not found: {examples_folder}",
+            "num_results": 0,
+            "results": [],
+            "query": query
+        }
+
+    # Find all document files in examples folder
+    doc_extensions = [".pdf", ".docx", ".txt", ".md"]
+    example_files = []
+
+    for ext in doc_extensions:
+        example_files.extend(examples_path.glob(f"**/*{ext}"))
+
+    if not example_files:
+        logger.info(f"No example files found in {examples_folder}")
+        return {
+            "status": "OK",
+            "num_results": 0,
+            "results": [],
+            "query": query,
+            "message": "No example credit packs found in database"
+        }
+
+    # Score each file based on query relevance
+    scored_examples = []
+    query_lower = query.lower()
+    query_terms = set(query_lower.split())
+
+    for file_path in example_files:
+        filename = file_path.name
+        filename_lower = filename.lower()
+
+        # Calculate simple relevance score (keyword matching)
+        score = 0.0
+
+        # Full query match in filename
+        if query_lower in filename_lower:
+            score += 10.0
+
+        # Individual term matches
+        for term in query_terms:
+            if term in filename_lower:
+                score += 2.0
+
+        # Sector keywords
+        sector_keywords = {
+            "infrastructure": ["infrastructure", "transport", "road", "bridge", "port"],
+            "real_estate": ["real estate", "property", "commercial", "residential", "office"],
+            "energy": ["energy", "power", "renewable", "solar", "wind"],
+            "financial": ["financial", "bank", "finance", "loan"],
+            "industrial": ["industrial", "manufacturing", "factory"],
+        }
+
+        detected_sector = "general"
+        for sector, keywords in sector_keywords.items():
+            if any(kw in filename_lower for kw in keywords):
+                detected_sector = sector
+                # Boost score if query matches sector
+                if any(kw in query_lower for kw in keywords):
+                    score += 5.0
+                break
+
+        # Try to load content preview (first 500 chars)
+        content_preview = ""
+        try:
+            if file_path.suffix == ".txt" or file_path.suffix == ".md":
+                content_preview = file_path.read_text(encoding="utf-8")[:500]
+                # Boost score if query terms appear in content
+                content_lower = content_preview.lower()
+                for term in query_terms:
+                    if term in content_lower:
+                        score += 1.0
+        except Exception as e:
+            logger.debug(f"Could not read {filename}: {e}")
+
+        # Extract title from filename (remove extension, replace underscores/hyphens)
+        title = file_path.stem.replace("_", " ").replace("-", " ").title()
+
+        scored_examples.append({
+            "filename": filename,
+            "file_path": str(file_path),
+            "title": title,
+            "sector": detected_sector,
+            "content_preview": content_preview or "[Content preview not available]",
+            "relevance_score": score,
+        })
+
+    # Sort by relevance score (descending)
+    scored_examples.sort(key=lambda x: x["relevance_score"], reverse=True)
+
+    # Return top N results
+    top_results = scored_examples[:num_results]
+
+    logger.info(f"Example search: '{query}' found {len(top_results)}/{len(scored_examples)} relevant examples")
+
+    return {
+        "status": "OK",
+        "num_results": len(top_results),
+        "results": top_results,
+        "query": query,
+        "total_examples": len(scored_examples)
+    }
+
+
+# =============================================================================
 # Test
 # =============================================================================
 
