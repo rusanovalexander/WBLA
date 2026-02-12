@@ -1,4 +1,10 @@
-# Credit Pack Multi-Agent PoC v3.2 FIXED
+# Credit Pack Multi-Agent PoC v3.2 FIXED - Autonomous Agent System
+
+## 🤖 NOW WITH CONVERSATIONAL AI INTERFACE
+
+This branch (`feature/autonomous-agents`) introduces a **fully autonomous conversational agent system** managed by natural language prompts.
+
+**Primary Interface**: `ui/chat_app.py` - Claude Code-style conversational UI with agent-to-agent communication
 
 ## 🔥 CRITICAL UPDATE - Phase 2 Extraction Issues RESOLVED
 
@@ -92,6 +98,43 @@ Multi-agent system for automated credit pack drafting with **native Gemini funct
 
 ---
 
+## Two Interfaces Available
+
+### 🤖 chat_app.py - Autonomous Conversational Agent (PRIMARY)
+
+**Philosophy**: Fully autonomous AI bot controlled by natural language prompts
+
+**Features**:
+- 🗣️ Natural language interface - just chat with the system
+- 🤝 Agent-to-agent communication - agents consult each other autonomously
+- 👁️ Visible thinking process - see agents working in real-time
+- ✅ Approval checkpoints - human-in-the-loop at key decisions
+- 🎯 Intent detection - automatically routes to correct agent/workflow
+
+**How to use**:
+```bash
+streamlit run ui/chat_app.py
+
+# Example prompts:
+# - "Analyze this deal" (upload teaser first)
+# - "What requirements do we need?"
+# - "Check compliance for this approach"
+# - "Draft the Executive Summary"
+```
+
+**See**: `AGENT_COMMUNICATION_ARCHITECTURE.md` for technical details
+
+### 📋 app.py - Phase-Based Workflow (LEGACY)
+
+**Philosophy**: Structured 6-phase workflow with manual progression
+
+**Status**: ⚠️ Deprecated - moved to `ui/legacy/app.py`
+
+This UI is kept for backward compatibility but is no longer actively developed.
+All new features are added to chat_app.py only.
+
+---
+
 ## Architecture
 
 ```
@@ -121,7 +164,10 @@ credit-pack-poc-v3/
 │   ├── field_discovery.py   # Dynamic field discovery
 │   └── phase_manager.py     # Workflow state management
 ├── ui/
-│   ├── app.py               # Streamlit app (routing only, ~600 lines)
+│   ├── chat_app.py          # PRIMARY: Conversational agent interface
+│   ├── legacy/
+│   │   ├── app.py           # DEPRECATED: Phase-based UI
+│   │   └── phases/          # Phase components (legacy)
 │   └── components/
 │       ├── sidebar.py       # Sidebar with all widgets
 │       └── agent_dashboard.py # Real-time agent activity panel
@@ -151,8 +197,11 @@ cp .env.example .env
 # Place teaser PDFs in data/teasers/
 # Place example credit packs in data/examples/
 
-# 4. Run
-streamlit run ui/app.py
+# 4. Run Autonomous Agent System
+streamlit run ui/chat_app.py
+
+# OR run legacy phase-based UI (deprecated)
+streamlit run ui/legacy/app.py
 ```
 
 ## Agents

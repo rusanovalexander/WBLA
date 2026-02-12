@@ -1,4 +1,16 @@
 """
+⚠️ DEPRECATED - Legacy Phase-Based UI ⚠️
+
+This is the OLD phase-based interface. It has been moved to ui/legacy/ and is no longer
+actively developed.
+
+For the NEW autonomous conversational agent system, use:
+    streamlit run ui/chat_app.py
+
+This legacy UI is kept for backward compatibility only and may be removed in future versions.
+
+---
+
 Credit Pack Multi-Agent PoC v3.2 — Streamlit Application (AUTONOMY FIXED)
 
 Key changes from previous version:
