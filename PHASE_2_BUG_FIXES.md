@@ -242,6 +242,7 @@ This was a **critical bug** - the chat app could not work at all without credent
 - [x] ModuleNotFoundError: `core.trace_store` → `core.tracing`
 - [x] **DefaultCredentialsError: Missing `setup_environment()` call (CRITICAL)**
 - [x] Governance discovery: Missing RAG search function parameters
+- [x] StreamlitDuplicateElementKey: Static approval button key
 
 ### 🧪 Next Testing Steps
 
@@ -317,6 +318,40 @@ Now governance discovery actually searches documents and populates the full cont
 
 ---
 
+---
+
+## Bug #6: StreamlitDuplicateElementKey - Approval Button
+
+### Error
+```
+StreamlitDuplicateElementKey: There are multiple elements with the same
+key='approve_button'
+```
+
+### Root Cause
+- `render_approval_checkpoint()` used static button key: `"approve_button"`
+- When approval checkpoint shown in message history, same button rendered multiple times
+- Streamlit requires unique keys for ALL UI elements
+
+### Fix (Commit 8298cfa)
+```python
+# Before
+def render_approval_checkpoint(next_suggestion: str):
+    if st.button("✅ Proceed", key="approve_button", ...):  # ← Static key!
+
+# After
+def render_approval_checkpoint(next_suggestion: str, message_idx: int):
+    if st.button("✅ Proceed", key=f"approve_button_{message_idx}", ...):  # ← Unique key!
+```
+
+### Files Changed
+- `ui/chat_app.py` (lines 162, 172, 199, 297)
+
+### Impact
+Without this fix, the chat app would crash when rendering message history with approval checkpoints.
+
+---
+
 ## Commits
 
 | Commit | Description | Files |
@@ -326,6 +361,7 @@ Now governance discovery actually searches documents and populates the full cont
 | `828147f` | Fix trace_store import path | conversational_orchestrator.py |
 | `69d7b5d` | **Fix missing setup_environment() call (CRITICAL)** | chat_app.py |
 | `7eb4130` | Fix governance discovery RAG functions | conversational_orchestrator.py |
+| `8298cfa` | Fix Streamlit duplicate button key | chat_app.py |
 
 ---
 
