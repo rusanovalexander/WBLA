@@ -241,6 +241,7 @@ This was a **critical bug** - the chat app could not work at all without credent
 - [x] Return type assumptions: `str` → `Dict[str, Any]`
 - [x] ModuleNotFoundError: `core.trace_store` → `core.tracing`
 - [x] **DefaultCredentialsError: Missing `setup_environment()` call (CRITICAL)**
+- [x] Governance discovery: Missing RAG search function parameters
 
 ### 🧪 Next Testing Steps
 
@@ -267,6 +268,55 @@ This was a **critical bug** - the chat app could not work at all without credent
 
 ---
 
+---
+
+## Bug #5: Governance Discovery - Missing RAG Search Functions
+
+### Warning
+```
+Governance discovery: no RAG results from either document
+```
+
+### Root Cause
+- `_load_governance()` called `run_governance_discovery()` with NO parameters
+- `run_governance_discovery()` requires `search_procedure_fn` and `search_guidelines_fn`
+- Without these, it cannot query RAG to discover governance context
+- Results in empty/failed governance discovery
+
+### Fix (Commit 7eb4130)
+```python
+# Before
+def _load_governance(self) -> dict[str, Any]:
+    result = run_governance_discovery()  # ← No search functions!
+
+# After
+def _load_governance(self) -> dict[str, Any]:
+    result = run_governance_discovery(
+        search_procedure_fn=tool_search_procedure,  # ← Pass RAG functions
+        search_guidelines_fn=tool_search_guidelines,
+        tracer=self.tracer
+    )
+    return {
+        "frameworks": result.get("frameworks", []),
+        "summary": result.get("summary", ""),
+        "full_context": result  # Store complete governance data
+    }
+```
+
+### Files Changed
+- `core/conversational_orchestrator.py` (lines 90-96)
+
+### Impact
+Without this fix, the governance context would be empty, meaning:
+- Agents wouldn't have framework-specific terminology
+- No compliance framework guidance
+- No section templates from procedures
+- Generic instructions instead of domain-adapted ones
+
+Now governance discovery actually searches documents and populates the full context.
+
+---
+
 ## Commits
 
 | Commit | Description | Files |
@@ -275,6 +325,7 @@ This was a **critical bug** - the chat app could not work at all without credent
 | `c7c741a` | Fix RAG search function imports | conversational_orchestrator.py |
 | `828147f` | Fix trace_store import path | conversational_orchestrator.py |
 | `69d7b5d` | **Fix missing setup_environment() call (CRITICAL)** | chat_app.py |
+| `7eb4130` | Fix governance discovery RAG functions | conversational_orchestrator.py |
 
 ---
 
