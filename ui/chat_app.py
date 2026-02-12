@@ -19,7 +19,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.settings import setup_environment, VERSION
 setup_environment()
 
-from core.conversational_orchestrator import ConversationalOrchestrator
+# Import v2 orchestrator with modern features
+try:
+    from core.conversational_orchestrator_v2 import ConversationalOrchestratorV2 as ConversationalOrchestrator
+except ImportError:
+    # Fallback to v1 if v2 not available
+    from core.conversational_orchestrator import ConversationalOrchestrator
 
 
 def init_session_state():
@@ -106,6 +111,34 @@ def render_sidebar():
 
         st.divider()
 
+        # 🆕 SOURCES USED TRACKING
+        st.header("📚 Sources")
+        if hasattr(st.session_state.orchestrator, 'persistent_context'):
+            context = st.session_state.orchestrator.persistent_context
+
+            # RAG searches
+            rag_count = len(context.get("rag_searches_done", []))
+            if rag_count > 0:
+                st.metric("RAG Searches", rag_count)
+                with st.expander("View RAG searches", expanded=False):
+                    for search in context.get("rag_searches_done", [])[-5:]:  # Last 5
+                        st.caption(f"🔍 {search['type']}: \"{search['query']}\" ({search['num_results']} results)")
+
+            # Examples used
+            examples_count = len(context.get("examples_used", []))
+            if examples_count > 0:
+                st.metric("Examples Used", examples_count)
+
+            # Files analyzed
+            files_analyzed = sum(1 for f in context.get("uploaded_files", {}).values() if f.get("analyzed"))
+            if files_analyzed > 0:
+                st.metric("Files Analyzed", files_analyzed)
+
+            if rag_count == 0 and examples_count == 0 and files_analyzed == 0:
+                st.info("No sources used yet")
+
+        st.divider()
+
         # Agent communication log
         st.header("💬 Agent Comms")
         comm_count = st.session_state.orchestrator.agent_bus.message_count
@@ -152,6 +185,14 @@ def render_thinking_process(thinking_steps: list[str], status_label: str = "Proc
             status.update(label="✅ Complete", state="complete")
 
 
+def render_reasoning(reasoning: str):
+    """🆕 Render extended reasoning/thinking from LLM."""
+    if reasoning:
+        with st.expander("🤔 Agent Reasoning (Extended Thinking)", expanded=False):
+            st.markdown(reasoning)
+            st.caption("_This is the agent's internal reasoning process using Gemini 2.5 extended thinking._")
+
+
 def render_agent_communication(comm_log: str):
     """Render agent-to-agent communication log."""
     if comm_log and comm_log != "(No agent communications)":
@@ -182,6 +223,10 @@ def render_chat():
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
+            # 🆕 Show extended reasoning if exists
+            if message.get("reasoning"):
+                render_reasoning(message["reasoning"])
+
             # Show thinking process if exists
             if message.get("thinking"):
                 render_thinking_process(
@@ -192,6 +237,18 @@ def render_chat():
             # Show agent communication if exists
             if message.get("agent_communication"):
                 render_agent_communication(message["agent_communication"])
+
+            # 🆕 Show sources used if exists
+            if message.get("sources_used"):
+                sources = message["sources_used"]
+                if any(sources.values()):  # If any source was used
+                    with st.expander("📚 Sources Consulted", expanded=False):
+                        if sources.get("rag_searches", 0) > 0:
+                            st.caption(f"🔍 RAG Database: {sources['rag_searches']} searches")
+                        if sources.get("examples", 0) > 0:
+                            st.caption(f"📋 Example Credit Packs: {sources['examples']} used")
+                        if sources.get("uploaded_files", 0) > 0:
+                            st.caption(f"📄 Uploaded Files: {sources['uploaded_files']} analyzed")
 
             # Show approval checkpoint if needed
             if message.get("requires_approval") and idx == len(st.session_state.messages) - 1:
@@ -270,6 +327,10 @@ def render_chat():
             # Display response
             st.markdown(result["response"])
 
+            # 🆕 Show extended reasoning
+            if result.get("reasoning"):
+                render_reasoning(result["reasoning"])
+
             # Show thinking in expander (for history)
             if result["thinking"]:
                 render_thinking_process(
@@ -281,13 +342,27 @@ def render_chat():
             if result.get("agent_communication"):
                 render_agent_communication(result["agent_communication"])
 
+            # 🆕 Show sources used
+            if result.get("sources_used"):
+                sources = result["sources_used"]
+                if any(sources.values()):
+                    with st.expander("📚 Sources Consulted", expanded=False):
+                        if sources.get("rag_searches", 0) > 0:
+                            st.caption(f"🔍 RAG Database: {sources['rag_searches']} searches")
+                        if sources.get("examples", 0) > 0:
+                            st.caption(f"📋 Example Credit Packs: {sources['examples']} used")
+                        if sources.get("uploaded_files", 0) > 0:
+                            st.caption(f"📄 Uploaded Files: {sources['uploaded_files']} analyzed")
+
             # Save assistant message
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": result["response"],
+                "reasoning": result.get("reasoning"),  # 🆕 Save reasoning
                 "thinking": result["thinking"],
                 "status_label": "✅ Complete",
                 "agent_communication": result.get("agent_communication"),
+                "sources_used": result.get("sources_used"),  # 🆕 Save sources
                 "requires_approval": result.get("requires_approval", False),
                 "next_suggestion": result.get("next_suggestion"),
             })
