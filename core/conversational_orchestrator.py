@@ -87,10 +87,15 @@ class ConversationalOrchestrator:
 
     def _load_governance(self) -> dict[str, Any]:
         """Load governance frameworks at startup."""
-        result = run_governance_discovery()
+        result = run_governance_discovery(
+            search_procedure_fn=tool_search_procedure,
+            search_guidelines_fn=tool_search_guidelines,
+            tracer=self.tracer
+        )
         return {
             "frameworks": result.get("frameworks", []),
             "summary": result.get("summary", ""),
+            "full_context": result  # Include full governance context
         }
 
     def _register_agent_responders(self):
