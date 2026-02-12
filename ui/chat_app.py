@@ -159,7 +159,7 @@ def render_agent_communication(comm_log: str):
             st.markdown(comm_log)
 
 
-def render_approval_checkpoint(next_suggestion: str):
+def render_approval_checkpoint(next_suggestion: str, message_idx: int):
     """Render approval checkpoint with suggested next action."""
     st.divider()
 
@@ -169,7 +169,7 @@ def render_approval_checkpoint(next_suggestion: str):
         st.info(f"💡 **Next:** {next_suggestion}")
 
     with col2:
-        if st.button("✅ Proceed", key="approve_button", use_container_width=True):
+        if st.button("✅ Proceed", key=f"approve_button_{message_idx}", use_container_width=True):
             st.session_state.pending_approval = next_suggestion
             st.rerun()
 
@@ -196,7 +196,7 @@ def render_chat():
             # Show approval checkpoint if needed
             if message.get("requires_approval") and idx == len(st.session_state.messages) - 1:
                 if message.get("next_suggestion"):
-                    render_approval_checkpoint(message["next_suggestion"])
+                    render_approval_checkpoint(message["next_suggestion"], idx)
 
     # Chat input
     user_input = st.chat_input("Type your message...")
@@ -294,7 +294,7 @@ def render_chat():
 
             # Show approval checkpoint if needed
             if result.get("requires_approval") and result.get("next_suggestion"):
-                render_approval_checkpoint(result["next_suggestion"])
+                render_approval_checkpoint(result["next_suggestion"], len(st.session_state.messages) - 1)
 
             # Force rerun to show approval button
             if result.get("requires_approval"):
