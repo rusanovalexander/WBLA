@@ -283,17 +283,39 @@ class ConversationalOrchestrator:
             self.context["analysis"] = result
 
             thinking.append("✓ Analysis complete")
-            thinking.append(f"✓ Found: {result.get('assessment_approach', 'N/A')} approach")
-            thinking.append(f"✓ Method: {result.get('origination_method', 'N/A')}")
+
+            # Extract structured decision
+            process_path = result.get('process_path', 'N/A')
+            orig_method = result.get('origination_method', 'N/A')
+            decision_found = result.get('decision_found', False)
+            confidence = result.get('decision_confidence', 'NONE')
+
+            thinking.append(f"✓ Process Path: {process_path}")
+            thinking.append(f"✓ Origination: {orig_method}")
+            thinking.append(f"✓ Decision: {'Found' if decision_found else 'Not found'} (confidence: {confidence})")
+
+            # Format response with structured decision
+            decision_status = "✅ **FOUND**" if decision_found else "⚠️ **NOT FOUND - Manual Selection Required**"
 
             response = f"""## Deal Analysis Complete
 
 {result['full_analysis']}
 
 ---
-**Key Findings:**
-- Assessment Approach: {result.get('assessment_approach', 'N/A')}
-- Origination Method: {result.get('origination_method', 'N/A')}
+### 📋 Structured Decision
+
+**Status:** {decision_status}
+**Confidence:** {confidence}
+
+**Process Path (Assessment Approach):**
+{process_path}
+
+**Origination Method:**
+{orig_method}
+
+**Reasoning:**
+- **Assessment:** {result.get('assessment_reasoning', 'N/A')}
+- **Origination:** {result.get('origination_reasoning', 'N/A')}
 """
 
             return {
