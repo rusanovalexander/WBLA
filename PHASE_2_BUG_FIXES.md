@@ -114,6 +114,78 @@ from core.tracing import TraceStore, set_tracer
 
 ---
 
+## Bug #4: DefaultCredentialsError - Missing setup_environment()
+
+### Error
+```
+google.auth.exceptions.DefaultCredentialsError: Your default credentials were not found.
+To set up Application Default Credentials, see https://cloud.google.com/docs/authentication/external/set-up-adc
+```
+
+### Root Cause
+- `chat_app.py` did NOT call `setup_environment()` from settings
+- `app.py` DOES call it (line 33)
+- `setup_environment()` sets the `GOOGLE_APPLICATION_CREDENTIALS` environment variable
+- Without this env var, Google Cloud SDK cannot find credentials
+
+### Why app.py Worked but chat_app.py Didn't
+
+**app.py (Working):**
+```python
+from config.settings import setup_environment, validate_config
+setup_environment()  # ← Sets GOOGLE_APPLICATION_CREDENTIALS
+```
+
+**chat_app.py (Broken):**
+```python
+# Missing setup_environment() call!
+from core.conversational_orchestrator import ConversationalOrchestrator
+```
+
+### What setup_environment() Does (settings.py lines 216-224)
+```python
+def setup_environment():
+    """Set up environment variables for Google Cloud."""
+    os.environ["GOOGLE_CLOUD_PROJECT"] = PROJECT_ID
+    os.environ["GOOGLE_CLOUD_LOCATION"] = VERTEX_LOCATION
+    os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+
+    if os.path.exists(KEY_PATH):
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = KEY_PATH  # ← Critical!
+```
+
+### Fix (Commit 69d7b5d)
+```python
+# Before
+import streamlit as st
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.conversational_orchestrator import ConversationalOrchestrator
+
+# After
+import streamlit as st
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Setup Google Cloud environment (MUST be called before importing orchestrator)
+from config.settings import setup_environment, VERSION
+setup_environment()  # ← Added this!
+
+from core.conversational_orchestrator import ConversationalOrchestrator
+```
+
+### Files Changed
+- `ui/chat_app.py` (lines 17-18, added setup call)
+
+### Impact
+This was a **critical bug** - the chat app could not work at all without credentials. Now it will use the same credential loading mechanism as the main app.
+
+---
+
 ## Root Cause Analysis
 
 ### Why These Errors Occurred
@@ -168,6 +240,7 @@ from core.tracing import TraceStore, set_tracer
 - [x] Parameter mismatch: `top_k` → `num_results`
 - [x] Return type assumptions: `str` → `Dict[str, Any]`
 - [x] ModuleNotFoundError: `core.trace_store` → `core.tracing`
+- [x] **DefaultCredentialsError: Missing `setup_environment()` call (CRITICAL)**
 
 ### 🧪 Next Testing Steps
 
@@ -201,6 +274,7 @@ from core.tracing import TraceStore, set_tracer
 | `1dc7886` | Fix discover_governance import | conversational_orchestrator.py |
 | `c7c741a` | Fix RAG search function imports | conversational_orchestrator.py |
 | `828147f` | Fix trace_store import path | conversational_orchestrator.py |
+| `69d7b5d` | **Fix missing setup_environment() call (CRITICAL)** | chat_app.py |
 
 ---
 
