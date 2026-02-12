@@ -15,6 +15,10 @@ import sys
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Setup Google Cloud environment (MUST be called before importing orchestrator)
+from config.settings import setup_environment, VERSION
+setup_environment()
+
 from core.conversational_orchestrator import ConversationalOrchestrator
 
 
