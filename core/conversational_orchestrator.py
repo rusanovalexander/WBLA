@@ -125,13 +125,13 @@ class ConversationalOrchestrator:
         except Exception as e:
             return {"status": "ERROR", "results": []}
 
-    def search_procedure(self, query: str, top_k: int = 3):
+    def search_procedure(self, query: str, num_results: int = 3):
         """Search procedure documents."""
-        return tool_search_procedure(query, num_results=top_k)
+        return tool_search_procedure(query, num_results=num_results)
 
-    def search_guidelines(self, query: str, top_k: int = 3):
+    def search_guidelines(self, query: str, num_results: int = 3):
         """Search guidelines documents."""
-        return tool_search_guidelines(query, num_results=top_k)
+        return tool_search_guidelines(query, num_results=num_results)
 
     def get_governance_context(self) -> dict[str, Any]:
         """Get current governance context."""

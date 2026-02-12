@@ -14,15 +14,22 @@ Fixed two critical bugs identified in independent audit:
 
 ---
 
-## C2 Fix: Function Name Mismatch
+## C2 Fix: Function Name Mismatch (COMPLETE FIX)
 
-### Problem
+### Problem 1: Function Name Mismatch
 Function names inconsistent across 3 layers:
 - Declarations: `search_procedure`
 - Implementation: `tool_search_procedure`
 - Caused native function calling to fail → expensive fallback
 
-### Solution: Adapter Layer (Option 2)
+### Problem 2: Parameter Name Mismatch (ADDITIONAL BUG FOUND)
+Orchestrator wrapper methods used wrong parameter name:
+- Declarations: `num_results`
+- Executor: `num_results`
+- Orchestrator wrappers: `top_k` ❌
+- Caused TypeError when native calling attempted to invoke wrappers
+
+### Solution Part 1: Adapter Layer (Option 2)
 
 **File**: `tools/rag_search.py` (end of file)
 
@@ -48,8 +55,30 @@ __all__ = [
 ]
 ```
 
+### Solution Part 2: Fix Parameter Names
+
+**Files**:
+- `core/conversational_orchestrator.py` (lines 128-134)
+- `core/conversational_orchestrator_v2.py` (lines 154-167)
+
+Changed parameter name from `top_k` → `num_results`:
+```python
+# BEFORE:
+def search_procedure(self, query: str, top_k: int = 3):
+    return tool_search_procedure(query, num_results=top_k)
+
+# AFTER:
+def search_procedure(self, query: str, num_results: int = 3):
+    return tool_search_procedure(query, num_results=num_results)
+```
+
+Applied to:
+- `search_procedure()` - ProcessAnalyst queries
+- `search_guidelines()` - ComplianceAdvisor queries
+
 ### Impact
-- ✅ Native function calling now works
+- ✅ Native function calling now works (Part 1: aliases)
+- ✅ Native function calling can invoke wrappers (Part 2: parameters)
 - ✅ Backward compatible (both names work)
 - ✅ Expected: 50-66% reduction in LLM calls
 - ✅ Expected: 2-3x speedup in tool operations
@@ -60,6 +89,7 @@ Run workflow and verify:
 - Fewer LLM calls per tool use (should be 1, not 2-3)
 - Faster response times
 - Tracer shows native function calls succeeding
+- No TypeError when executor calls orchestrator wrappers
 
 ---
 
@@ -178,8 +208,10 @@ Response: "Key highlights are X, Y, Z..."
 
 ## Files Modified
 
-### C2 Fix
-1. `tools/rag_search.py` - Added native function calling aliases
+### C2 Fix (Complete)
+1. `tools/rag_search.py` - Added native function calling aliases (Part 1)
+2. `core/conversational_orchestrator.py` - Fixed parameter names (Part 2)
+3. `core/conversational_orchestrator_v2.py` - Fixed parameter names (Part 2)
 
 ### C1 Fix
 1. `agents/writer.py` - Added agent query logic to draft_section()

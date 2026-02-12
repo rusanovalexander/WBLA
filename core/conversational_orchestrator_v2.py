@@ -151,9 +151,9 @@ class ConversationalOrchestratorV2:
         except Exception as e:
             return {"status": "ERROR", "results": []}
 
-    def search_procedure(self, query: str, top_k: int = 3):
+    def search_procedure(self, query: str, num_results: int = 3):
         """Search procedure documents."""
-        result = tool_search_procedure(query, num_results=top_k)
+        result = tool_search_procedure(query, num_results=num_results)
         # Track search
         self.persistent_context["rag_searches_done"].append({
             "type": "procedure",
@@ -162,9 +162,9 @@ class ConversationalOrchestratorV2:
         })
         return result
 
-    def search_guidelines(self, query: str, top_k: int = 3):
+    def search_guidelines(self, query: str, num_results: int = 3):
         """Search guidelines documents."""
-        result = tool_search_guidelines(query, num_results=top_k)
+        result = tool_search_guidelines(query, num_results=num_results)
         # Track search
         self.persistent_context["rag_searches_done"].append({
             "type": "guidelines",
