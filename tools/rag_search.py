@@ -511,6 +511,33 @@ def tool_search_examples(
 
 
 # =============================================================================
+# Native Function Calling Aliases (Fix for C2)
+# =============================================================================
+
+# Create aliases without "tool_" prefix for Gemini native function calling
+# This fixes the name mismatch between function declarations and actual functions
+search_procedure = tool_search_procedure
+search_guidelines = tool_search_guidelines
+search_rag = tool_search_rag
+search_examples = tool_search_examples
+
+# Export both naming conventions
+__all__ = [
+    # Original names (for backward compatibility)
+    'tool_search_procedure',
+    'tool_search_guidelines',
+    'tool_search_rag',
+    'tool_search_examples',
+    'test_rag_connection',
+    # Native calling aliases (for Gemini function declarations)
+    'search_procedure',
+    'search_guidelines',
+    'search_rag',
+    'search_examples',
+]
+
+
+# =============================================================================
 # Test
 # =============================================================================
 

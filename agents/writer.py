@@ -468,6 +468,11 @@ class Writer:
 {previously_drafted[:6000]}
 """
 
+        # 🆕 C1 FIX: Query other agents for additional context if needed
+        agent_insights = ""
+        if self.agent_bus:
+            agent_insights = self._query_agents_for_section(section_name, context)
+
         # Build prompt
         prompt = f"""{self.instruction}
 
@@ -493,6 +498,8 @@ Detail Level: {section.get('detail_level', 'Standard')}
 {f"### Supplementary Documents:{supplement_context}" if supplement_context else ""}
 
 {previously_context}
+
+{f"### Agent Insights (from ProcessAnalyst and ComplianceAdvisor):{agent_insights}" if agent_insights else ""}
 
 ### Example Document (STYLE REFERENCE ONLY):
 {example_text}
@@ -599,3 +606,93 @@ Remember:
             return "Example sections: " + ", ".join(sections[:10])
 
         return "(No clear section structure in example)"
+
+    # =========================================================================
+    # C1 FIX: Agent-to-Agent Communication
+    # =========================================================================
+
+    def _query_agents_for_section(self, section_name: str, context: dict) -> str:
+        """
+        Query other agents for additional context when drafting sections.
+
+        This implements the agent communication feature (C1 fix).
+        """
+        if not self.agent_bus:
+            return ""
+
+        insights = []
+        section_lower = section_name.lower()
+
+        # Query ProcessAnalyst for risk/deal-specific insights
+        if self._section_needs_analyst_input(section_lower):
+            try:
+                query = self._build_analyst_query(section_lower)
+                response = self.agent_bus.query(
+                    from_agent="Writer",
+                    to_agent="ProcessAnalyst",
+                    query=query,
+                    context=context
+                )
+                if response and not response.startswith("[Agent"):
+                    insights.append(f"\n**ProcessAnalyst Input:**\n{response}")
+            except Exception as e:
+                # Silent failure - don't block drafting if query fails
+                pass
+
+        # Query ComplianceAdvisor for compliance/guideline insights
+        if self._section_needs_compliance_input(section_lower):
+            try:
+                query = self._build_compliance_query(section_lower)
+                response = self.agent_bus.query(
+                    from_agent="Writer",
+                    to_agent="ComplianceAdvisor",
+                    query=query,
+                    context=context
+                )
+                if response and not response.startswith("[Agent"):
+                    insights.append(f"\n**ComplianceAdvisor Input:**\n{response}")
+            except Exception as e:
+                # Silent failure
+                pass
+
+        return "\n".join(insights) if insights else ""
+
+    def _section_needs_analyst_input(self, section_name: str) -> bool:
+        """Check if section should query ProcessAnalyst."""
+        # Sections that benefit from ProcessAnalyst input
+        analyst_keywords = [
+            "executive", "summary", "risk", "assessment",
+            "analysis", "deal", "structure", "background",
+            "overview", "key features"
+        ]
+        return any(kw in section_name for kw in analyst_keywords)
+
+    def _section_needs_compliance_input(self, section_name: str) -> bool:
+        """Check if section should query ComplianceAdvisor."""
+        # Sections that benefit from ComplianceAdvisor input
+        compliance_keywords = [
+            "compliance", "regulatory", "guidelines",
+            "policy", "requirements", "framework",
+            "legal", "governance"
+        ]
+        return any(kw in section_name for kw in compliance_keywords)
+
+    def _build_analyst_query(self, section_name: str) -> str:
+        """Build query for ProcessAnalyst based on section type."""
+        if "risk" in section_name:
+            return "What are the 2-3 most critical risks for this deal that should be highlighted?"
+        elif "executive" in section_name or "summary" in section_name:
+            return "What are the key highlights and critical considerations for this deal?"
+        elif "structure" in section_name:
+            return "Describe the deal structure and key financial terms."
+        else:
+            return f"What key information should be included in the '{section_name}' section?"
+
+    def _build_compliance_query(self, section_name: str) -> str:
+        """Build query for ComplianceAdvisor based on section type."""
+        if "compliance" in section_name:
+            return "What are the key compliance considerations and any policy exceptions for this deal?"
+        elif "guideline" in section_name or "framework" in section_name:
+            return "What guidelines and frameworks apply to this deal?"
+        else:
+            return f"Are there any compliance notes relevant to the '{section_name}' section?"
