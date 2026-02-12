@@ -771,3 +771,70 @@ For now, would you like me to proceed with the current analysis?
             return f"Say 'Draft next section' to write '{next_section}'"
 
         return "All steps complete! Review your draft."
+
+    def _handle_general(self, message: str, thinking: list[str]) -> dict:
+        """Handle general questions and guidance (fallback when intent is unclear)."""
+
+        thinking.append("💡 Providing general guidance")
+
+        # Build status summary using persistent_context
+        status_parts = []
+        if self.persistent_context.get("teaser_text"):
+            status_parts.append(f"✓ Teaser loaded: {self.persistent_context['teaser_filename']}")
+        else:
+            status_parts.append("○ No teaser uploaded")
+
+        if self.persistent_context.get("analysis"):
+            status_parts.append("✓ Analysis complete")
+        else:
+            status_parts.append("○ Analysis pending")
+
+        if self.persistent_context.get("requirements"):
+            status_parts.append(f"✓ {len(self.persistent_context['requirements'])} requirements discovered")
+        else:
+            status_parts.append("○ Requirements pending")
+
+        if self.persistent_context.get("compliance_checks"):
+            status_parts.append(f"✓ {len(self.persistent_context['compliance_checks'])} compliance checks")
+        else:
+            status_parts.append("○ Compliance pending")
+
+        if self.persistent_context.get("structure"):
+            status_parts.append(f"✓ {len(self.persistent_context['structure'])} sections structured")
+            status_parts.append(f"✓ {len(self.persistent_context['drafts'])} sections drafted")
+        else:
+            status_parts.append("○ Structure pending")
+
+        status = "\n".join(status_parts)
+
+        response = f"""## Credit Pack Assistant
+
+I can help you draft credit packs through natural conversation.
+
+**Current Status:**
+{status}
+
+**What I can do:**
+- **Analyze deals**: Upload a teaser and ask me to analyze it
+- **Discover requirements**: Extract key data points from the deal
+- **Check compliance**: Verify against regulatory guidelines
+- **Draft sections**: Generate credit pack sections with citations
+- **Agent queries**: Ask ProcessAnalyst or ComplianceAdvisor specific questions
+
+**Agent Communication:**
+- Agents can consult each other autonomously during drafting
+- Use "Show communication log" to see agent-to-agent queries
+- Ask agents directly: "Ask ProcessAnalyst about the loan amount"
+
+**Next Steps:**
+{self._suggest_next_step()}
+"""
+
+        return {
+            "response": response,
+            "thinking": thinking,
+            "action": None,
+            "requires_approval": False,
+            "next_suggestion": None,
+            "agent_communication": None,
+        }
