@@ -27,31 +27,56 @@ def _get_serving_config() -> str:
     )
 
 
-def _convert_proto_to_dict(obj) -> Any:
-    """Convert protobuf/MapComposite objects to Python native types."""
+def _convert_proto_to_dict(obj, max_depth: int = 50, _current_depth: int = 0, _seen: set = None) -> Any:
+    """
+    Convert protobuf/MapComposite objects to Python native types.
+
+    Args:
+        obj: Object to convert
+        max_depth: Maximum recursion depth (default 50)
+        _current_depth: Current recursion depth (internal)
+        _seen: Set of object IDs already seen (internal, for circular reference detection)
+    """
+    # Initialize seen set on first call
+    if _seen is None:
+        _seen = set()
+
+    # Check recursion depth limit
+    if _current_depth >= max_depth:
+        logger.warning("Maximum recursion depth (%d) reached in _convert_proto_to_dict", max_depth)
+        return "[MAX_DEPTH_REACHED]"
+
     if obj is None:
         return None
-    
+
+    # Circular reference detection for non-primitive types
+    obj_id = id(obj)
+    if not isinstance(obj, (str, int, float, bool, type(None))):
+        if obj_id in _seen:
+            logger.debug("Circular reference detected in _convert_proto_to_dict")
+            return "[CIRCULAR_REF]"
+        _seen.add(obj_id)
+
     if isinstance(obj, (str, int, float, bool)):
         return obj
-    
+
     if isinstance(obj, (list, tuple)):
-        return [_convert_proto_to_dict(item) for item in obj]
-    
+        return [_convert_proto_to_dict(item, max_depth, _current_depth + 1, _seen) for item in obj]
+
     if isinstance(obj, dict):
-        return {k: _convert_proto_to_dict(v) for k, v in obj.items()}
-    
+        return {k: _convert_proto_to_dict(v, max_depth, _current_depth + 1, _seen) for k, v in obj.items()}
+
     # Try dict-like conversion
     try:
         if hasattr(obj, 'items'):
-            return {k: _convert_proto_to_dict(v) for k, v in obj.items()}
+            return {k: _convert_proto_to_dict(v, max_depth, _current_depth + 1, _seen) for k, v in obj.items()}
     except Exception as e:
         logger.debug("Proto dict-like conversion failed: %s", e)
 
     # Try list-like conversion
     try:
         if hasattr(obj, '__iter__') and not isinstance(obj, str):
-            return [_convert_proto_to_dict(item) for item in obj]
+            return [_convert_proto_to_dict(item, max_depth, _current_depth + 1, _seen) for item in obj]
     except Exception as e:
         logger.debug("Proto list-like conversion failed: %s", e)
 
@@ -63,7 +88,7 @@ def _convert_proto_to_dict(obj) -> Any:
         return MessageToDict(obj)
     except Exception as e:
         logger.debug("Proto MessageToDict conversion failed: %s", e)
-    
+
     return str(obj)
 
 
