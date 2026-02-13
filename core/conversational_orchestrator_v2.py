@@ -505,7 +505,7 @@ class ConversationalOrchestratorV2:
             search_query = message.replace("add", "").replace("more", "").replace("about", "").strip()
             thinking.append(f"🔍 Searching procedures for: {search_query}")
 
-            rag_results = self.search_procedure(search_query, top_k=5)
+            rag_results = self.search_procedure(search_query, num_results=5)
 
             # Generate enhanced analysis
             enhancement = call_llm(
