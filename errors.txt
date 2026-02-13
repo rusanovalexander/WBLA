@@ -1,84 +1,12 @@
-🤖 Credit Pack Assistant
-Multi-agent conversational system for credit pack drafting
-
-=== BUGS FIXED (2026-02-13 - Latest Session) ===
-
-✅ Bug 1: LLMCallResult subscriptable error - FIXED in commit e575b0b
-   Location: line 354, 356 in _analyze_uploaded_files()
-   Fix: insights → insights.text
-
-✅ Bug 2: LLMCallResult .strip() error - FIXED in commit e575b0b
-   Location: line 433 in _detect_intent_with_reasoning()
-   Fix: intent_response.strip() → intent_response.text.strip()
-
-⚠️ Bug 3: Maximum recursion in RAG queries - UNDER INVESTIGATION
-   Location: governance_discovery.run_governance_discovery()
-   Status: Needs Vertex AI environment to reproduce and debug
-   Workaround: Temporarily disable governance discovery if needed
-
-=== ALL C1/C2 BUGS FIXED (Earlier Session) ===
-
-✅ C1: Agent Communication Bus functional
-✅ C2: Function name aliases added
-✅ C2: Parameter names aligned (top_k → num_results)
-✅ Runtime: _handle_general added to V2
-✅ Runtime: Responder calls traced
-✅ Runtime: Line 508 top_k fixed
-
-=== LATEST TEST RUN (2026-02-13 - Remote) ===
-
-analyse teaser
-
-Credit Pack Assistant
-I can help you draft credit packs through natural conversation.
-
-Current Status: ✓ Teaser loaded: Teaser_anon.txt ○ Analysis pending ○ Requirements pending ○ Compliance pending ○ Structure pending
-
-What I can do:
-
-Analyze deals: Upload a teaser and ask me to analyze it
-Discover requirements: Extract key data points from the deal
-Check compliance: Verify against regulatory guidelines
-Draft sections: Generate credit pack sections with citations
-Agent queries: Ask ProcessAnalyst or ComplianceAdvisor specific questions
-Agent Communication:
-
-Agents can consult each other autonomously during drafting
-Use "Show communication log" to see agent-to-agent queries
-Ask agents directly: "Ask ProcessAnalyst about the loan amount"
-Next Steps: Say 'Analyze this deal' to begin
-
-✅ Complete
-
-📄 New file uploaded: Teaser_anon.txt
-
-⏳ Analyzing Teaser_anon.txt (teaser)...
-
-⚠️ Could not analyze Teaser_anon.txt: 'LLMCallResult' object is not subscriptable [FIXED]
-
-⚠️ Intent detection failed: 'LLMCallResult' object has no attribute 'strip', defaulting to general [FIXED]
-
-✓ Detected intent: general
-
-💡 Providing general guidance
-
-
-❌ Remaining issue:
 Procedure query failed for 'information requirements assessment methods origination': maximum recursion depth exceeded
+Procedure query failed for 'required sections content structure output document': maximum recursion depth exceeded
+Procedure query failed for 'assessment approach types available decision criteria': maximum recursion depth exceeded
+Procedure query failed for 'origination methods types available when each applies': maximum recursion depth exceeded
+Procedure query failed for 'classification categories types dimensions taxonomy': maximum recursion depth exceeded
 Guidelines query failed for 'compliance criteria categories requirements': maximum recursion depth exceeded
-[Multiple similar errors...]
-
-=== STATUS ===
-
-✅ READY FOR TESTING:
-  - File upload analysis
-  - Intent detection
-  - All C1/C2 agent communication
-  - Parameter name fixes
-
-⚠️ NEEDS INVESTIGATION:
-  - Maximum recursion in governance discovery
-  - Requires Vertex AI credentials to debug
-
-To test:
-$ streamlit run ui/chat_app.py
+Guidelines query failed for 'risk categories risk assessment framework appetite': maximum recursion depth exceeded
+Guidelines query failed for 'financial ratio requirements thresholds limits covenants': maximum recursion depth exceeded
+Guidelines query failed for 'security collateral requirements structural provisions': maximum recursion depth exceeded
+Tool execution failed: search_procedure({'query': 'assessment approach decision criteria thresholds real estate financing', 'num_results': 5}): maximum recursion depth exceeded
+Tool execution failed: search_procedure({'num_results': 5, 'query': 'assessment approach decision criteria thresholds real estate financing'}): maximum recursion depth exceeded
+Tool execution failed: search_procedure({'num_results': 5, 'query': 'assessment approach thresholds'}): maximum recursion depth exceeded
