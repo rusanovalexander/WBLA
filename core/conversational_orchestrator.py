@@ -101,9 +101,14 @@ class ConversationalOrchestrator:
     def _register_agent_responders(self):
         """Register agent responder functions for inter-agent communication."""
 
+        # Create tracer-aware LLM caller wrapper
+        def llm_with_tracer(prompt, model, temperature, max_tokens, agent_name):
+            """Wrapper that passes the orchestrator's tracer to call_llm."""
+            return call_llm(prompt, model, temperature, max_tokens, agent_name, tracer=self.tracer)
+
         # Process Analyst responder
         pa_responder = create_process_analyst_responder(
-            llm_caller=call_llm,
+            llm_caller=llm_with_tracer,
             model=MODEL_PRO,
             governance_context=self.governance_context,
         )
@@ -111,7 +116,7 @@ class ConversationalOrchestrator:
 
         # Compliance Advisor responder
         ca_responder = create_compliance_advisor_responder(
-            llm_caller=call_llm,
+            llm_caller=llm_with_tracer,
             model=MODEL_PRO,
             rag_tool=self._rag_search_guidelines,
             governance_context=self.governance_context,
