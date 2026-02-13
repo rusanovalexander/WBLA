@@ -158,25 +158,45 @@ class ConversationalOrchestratorV2:
 
     def search_procedure(self, query: str, num_results: int = 3):
         """Search procedure documents."""
-        result = tool_search_procedure(query, num_results=num_results)
-        # Track search
-        self.persistent_context["rag_searches_done"].append({
-            "type": "procedure",
-            "query": query,
-            "num_results": num_results
-        })
-        return result
+        try:
+            result = tool_search_procedure(query, num_results=num_results)
+            # Track search
+            self.persistent_context["rag_searches_done"].append({
+                "type": "procedure",
+                "query": query,
+                "num_results": num_results
+            })
+            return result
+        except RecursionError as e:
+            # Log recursion error and return empty result
+            import logging
+            logging.error(f"RecursionError in search_procedure for query '{query}': {e}")
+            return {"status": "ERROR", "results": [], "error": "RecursionError"}
+        except Exception as e:
+            import logging
+            logging.error(f"Error in search_procedure for query '{query}': {e}")
+            return {"status": "ERROR", "results": [], "error": str(e)}
 
     def search_guidelines(self, query: str, num_results: int = 3):
         """Search guidelines documents."""
-        result = tool_search_guidelines(query, num_results=num_results)
-        # Track search
-        self.persistent_context["rag_searches_done"].append({
-            "type": "guidelines",
-            "query": query,
-            "num_results": num_results
-        })
-        return result
+        try:
+            result = tool_search_guidelines(query, num_results=num_results)
+            # Track search
+            self.persistent_context["rag_searches_done"].append({
+                "type": "guidelines",
+                "query": query,
+                "num_results": num_results
+            })
+            return result
+        except RecursionError as e:
+            # Log recursion error and return empty result
+            import logging
+            logging.error(f"RecursionError in search_guidelines for query '{query}': {e}")
+            return {"status": "ERROR", "results": [], "error": "RecursionError"}
+        except Exception as e:
+            import logging
+            logging.error(f"Error in search_guidelines for query '{query}': {e}")
+            return {"status": "ERROR", "results": [], "error": str(e)}
 
     def get_governance_context(self) -> dict[str, Any]:
         """Get current governance context."""
