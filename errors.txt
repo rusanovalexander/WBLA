@@ -1,10 +1,48 @@
-Credit Pack Assistant
+🤖 Credit Pack Assistant
 Multi-agent conversational system for credit pack drafting
 
-start analysis
+analyse teaser
 
-❌ Error: 'ConversationalOrchestratorV2' object has no attribute '_handle_general'
+Credit Pack Assistant
+I can help you draft credit packs through natural conversation.
 
-❌ Error
+Current Status: ✓ Teaser loaded: Teaser_anon.txt ○ Analysis pending ○ Requirements pending ○ Compliance pending ○ Structure pending
 
-❌ 'ConversationalOrchestratorV2' object has no attribute '_handle_general'
+What I can do:
+
+Analyze deals: Upload a teaser and ask me to analyze it
+Discover requirements: Extract key data points from the deal
+Check compliance: Verify against regulatory guidelines
+Draft sections: Generate credit pack sections with citations
+Agent queries: Ask ProcessAnalyst or ComplianceAdvisor specific questions
+Agent Communication:
+
+Agents can consult each other autonomously during drafting
+Use "Show communication log" to see agent-to-agent queries
+Ask agents directly: "Ask ProcessAnalyst about the loan amount"
+Next Steps: Say 'Analyze this deal' to begin
+
+✅ Complete
+
+📄 New file uploaded: Teaser_anon.txt
+
+⏳ Analyzing Teaser_anon.txt (teaser)...
+
+⚠️ Could not analyze Teaser_anon.txt: 'LLMCallResult' object is not subscriptable
+
+⚠️ Intent detection failed: 'LLMCallResult' object has no attribute 'strip', defaulting to general
+
+✓ Detected intent: general
+
+💡 Providing general guidance
+
+
+rocedure query failed for 'information requirements assessment methods origination': maximum recursion depth exceeded
+Procedure query failed for 'required sections content structure output document': maximum recursion depth exceeded
+Procedure query failed for 'assessment approach types available decision criteria': maximum recursion depth exceeded
+Procedure query failed for 'origination methods types available when each applies': maximum recursion depth exceeded
+Procedure query failed for 'classification categories types dimensions taxonomy': maximum recursion depth exceeded
+Guidelines query failed for 'compliance criteria categories requirements': maximum recursion depth exceeded
+Guidelines query failed for 'risk categories risk assessment framework appetite': maximum recursion depth exceeded
+Guidelines query failed for 'financial ratio requirements thresholds limits covenants': maximum recursion depth exceeded
+Guidelines query failed for 'security collateral requirements structural provisions': maximum recursion depth exceeded
