@@ -863,3 +863,367 @@ I can help you draft credit packs through natural conversation.
             "next_suggestion": None,
             "agent_communication": None,
         }
+    def _handle_requirements(self, message: str, thinking: list[str]) -> dict:
+        """Handle requirements discovery request."""
+
+        if not self.persistent_context.get("analysis"):
+            return {
+                "response": "❌ Please complete deal analysis first.",
+                "thinking": thinking + ["❌ No analysis found"],
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": "Run analysis first: 'Analyze this deal'",
+                "agent_communication": None,
+            }
+
+        thinking.append("⏳ Discovering requirements via ProcessAnalyst...")
+
+        try:
+            requirements = self.analyst.discover_requirements(
+                analysis_text=self.persistent_context["analysis"]["full_analysis"],
+                assessment_approach=self.persistent_context["analysis"].get("assessment_approach", ""),
+                origination_method=self.persistent_context["analysis"].get("origination_method", ""),
+            )
+
+            # Update context
+            self.persistent_context["requirements"] = requirements
+
+            thinking.append(f"✓ Discovered {len(requirements)} requirements")
+
+            # Format requirements for display
+            req_list = "\n".join([
+                f"{i+1}. **{r['name']}**: {r.get('value', 'Not filled')} ({r.get('status', 'pending')})"
+                for i, r in enumerate(requirements)
+            ])
+
+            response = f"""## Requirements Discovered
+
+{req_list}
+
+---
+**Total Requirements:** {len(requirements)}
+"""
+
+            return {
+                "response": response,
+                "thinking": thinking,
+                "action": "requirements_discovered",
+                "requires_approval": True,
+                "next_suggestion": "Run compliance checks on these requirements?",
+                "agent_communication": self.get_agent_communication_log() if self.agent_bus.message_count > 0 else None,
+            }
+
+        except Exception as e:
+            thinking.append(f"❌ Requirements discovery failed: {e}")
+            return {
+                "response": f"❌ Requirements discovery failed: {str(e)}",
+                "thinking": thinking,
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": None,
+            }
+
+    def _handle_compliance(self, message: str, thinking: list[str]) -> dict:
+        """Handle compliance check request."""
+
+        if not self.persistent_context.get("requirements"):
+            return {
+                "response": "❌ Please discover requirements first.",
+                "thinking": thinking + ["❌ No requirements found"],
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": "Discover requirements first",
+                "agent_communication": None,
+            }
+
+        thinking.append("⏳ Running ComplianceAdvisor assessment...")
+        thinking.append(f"📋 Checking {len(self.persistent_context['requirements'])} requirements...")
+
+        try:
+            result_text, checks = self.advisor.assess_compliance(
+                requirements=self.persistent_context["requirements"],
+                teaser_text=self.persistent_context["teaser_text"],
+                extracted_data=self.persistent_context["analysis"]["full_analysis"],
+                use_native_tools=True
+            )
+
+            # Update context
+            self.persistent_context["compliance_result"] = result_text
+            self.persistent_context["compliance_checks"] = checks
+
+            thinking.append(f"✓ Found {len(checks)} compliance considerations")
+
+            # Format checks
+            checks_list = "\n".join([
+                f"- **{c.get('requirement', 'General')}**: {c.get('finding', 'N/A')} [{c.get('severity', 'info')}]"
+                for c in checks[:5]  # Show first 5
+            ])
+
+            response = f"""## Compliance Assessment Complete
+
+{result_text}
+
+---
+**Key Findings:**
+{checks_list}
+
+Total Checks: {len(checks)}
+"""
+
+            return {
+                "response": response,
+                "thinking": thinking,
+                "action": "compliance_complete",
+                "requires_approval": True,
+                "next_suggestion": "Generate document structure for drafting?",
+                "agent_communication": self.get_agent_communication_log() if self.agent_bus.message_count > 0 else None,
+            }
+
+        except Exception as e:
+            thinking.append(f"❌ Compliance check failed: {e}")
+            return {
+                "response": f"❌ Compliance check failed: {str(e)}",
+                "thinking": thinking,
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": None,
+            }
+
+    def _handle_structure(self, message: str, thinking: list[str]) -> dict:
+        """Handle structure generation request."""
+
+        if not self.persistent_context.get("analysis"):
+            return {
+                "response": "❌ Please complete analysis first.",
+                "thinking": thinking + ["❌ No analysis found"],
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": "Run analysis first",
+                "agent_communication": None,
+            }
+
+        thinking.append("⏳ Generating document structure via Writer...")
+
+        try:
+            structure = self.writer.generate_structure(
+                example_text=self.persistent_context.get("example_text", ""),
+                assessment_approach=self.persistent_context["analysis"].get("assessment_approach", ""),
+                origination_method=self.persistent_context["analysis"].get("origination_method", ""),
+                analysis_text=self.persistent_context["analysis"]["full_analysis"],
+            )
+
+            # Update context
+            self.persistent_context["structure"] = structure
+            self.persistent_context["current_section_index"] = 0
+
+            thinking.append(f"✓ Generated {len(structure)} sections")
+
+            # Format structure
+            structure_list = "\n".join([
+                f"{i+1}. **{s['name']}**\n   {s.get('description', 'No description')[:100]}..."
+                for i, s in enumerate(structure)
+            ])
+
+            response = f"""## Document Structure Generated
+
+{structure_list}
+
+---
+**Total Sections:** {len(structure)}
+"""
+
+            return {
+                "response": response,
+                "thinking": thinking,
+                "action": "structure_generated",
+                "requires_approval": True,
+                "next_suggestion": f"Draft first section: '{structure[0]['name']}'?",
+                "agent_communication": self.get_agent_communication_log() if self.agent_bus.message_count > 0 else None,
+            }
+
+        except Exception as e:
+            thinking.append(f"❌ Structure generation failed: {e}")
+            return {
+                "response": f"❌ Structure generation failed: {str(e)}",
+                "thinking": thinking,
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": None,
+            }
+
+    def _handle_drafting(self, message: str, thinking: list[str]) -> dict:
+        """Handle section drafting request."""
+
+        if not self.persistent_context.get("structure"):
+            thinking.append("⚠️ No structure found, generating first...")
+            # Auto-generate structure
+            structure_result = self._handle_structure(message, thinking)
+            if structure_result["action"] != "structure_generated":
+                return structure_result
+
+        # Determine which section to draft
+        section_index = self.persistent_context["current_section_index"]
+
+        if section_index >= len(self.persistent_context["structure"]):
+            return {
+                "response": "✅ All sections have been drafted!",
+                "thinking": thinking + ["✓ Drafting complete"],
+                "action": "drafting_complete",
+                "requires_approval": False,
+                "next_suggestion": "Review and finalize the document",
+                "agent_communication": self.get_agent_communication_log() if self.agent_bus.message_count > 0 else None,
+            }
+
+        section = self.persistent_context["structure"][section_index]
+        thinking.append(f"✏️ Drafting section {section_index + 1}/{len(self.persistent_context['structure'])}: '{section['name']}'")
+
+        # Check if Writer might query other agents
+        if self.agent_bus.message_count == 0:
+            thinking.append("💬 Writer may consult ProcessAnalyst or ComplianceAdvisor...")
+
+        try:
+            draft = self.writer.draft_section(
+                section=section,
+                context={
+                    "teaser_text": self.persistent_context["teaser_text"],
+                    "analysis": self.persistent_context.get("analysis", {}),
+                    "extracted_data": self.persistent_context["analysis"]["full_analysis"] if self.persistent_context.get("analysis") else "",
+                    "requirements": self.persistent_context.get("requirements", []),
+                    "compliance_result": self.persistent_context.get("compliance_result", ""),
+                    "compliance_checks": self.persistent_context.get("compliance_checks", []),
+                }
+            )
+
+            # Update context
+            self.persistent_context["drafts"][section["name"]] = draft
+            self.persistent_context["current_section_index"] += 1
+
+            thinking.append(f"✓ Draft complete ({len(draft.content)} chars)")
+
+            # Check for agent communications
+            agent_comm_log = None
+            if self.agent_bus.message_count > 0:
+                thinking.append(f"💬 {self.agent_bus.message_count} agent-to-agent queries made")
+                agent_comm_log = self.get_agent_communication_log()
+
+            response = f"""## {section['name']}
+
+{draft.content}
+
+---
+**Draft Status:** {section_index + 1}/{len(self.persistent_context['structure'])} sections complete
+"""
+
+            next_section = None
+            if self.persistent_context["current_section_index"] < len(self.persistent_context["structure"]):
+                next_section = self.persistent_context["structure"][self.persistent_context["current_section_index"]]["name"]
+
+            return {
+                "response": response,
+                "thinking": thinking,
+                "action": "section_drafted",
+                "requires_approval": True,
+                "next_suggestion": f"Draft next section: '{next_section}'?" if next_section else "All sections complete!",
+                "agent_communication": agent_comm_log,
+            }
+
+        except Exception as e:
+            thinking.append(f"❌ Drafting failed: {e}")
+            return {
+                "response": f"❌ Drafting failed: {str(e)}",
+                "thinking": thinking,
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": None,
+            }
+
+    def _handle_agent_query(self, message: str, thinking: list[str]) -> dict:
+        """Handle direct agent query (user asking one agent to query another)."""
+
+        # Parse query: "Ask ProcessAnalyst about loan amount"
+        message_lower = message.lower()
+
+        if "analyst" in message_lower or "process" in message_lower:
+            to_agent = "ProcessAnalyst"
+        elif "compliance" in message_lower or "advisor" in message_lower:
+            to_agent = "ComplianceAdvisor"
+        else:
+            return {
+                "response": "❌ Please specify which agent to query (ProcessAnalyst or ComplianceAdvisor)",
+                "thinking": thinking,
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": None,
+            }
+
+        # Extract query
+        query = message.split("about", 1)[-1].strip() if "about" in message_lower else message
+
+        thinking.append(f"💬 Querying {to_agent}...")
+
+        # Execute query via bus
+        try:
+            response_text = self.agent_bus.query(
+                from_agent="User",
+                to_agent=to_agent,
+                query=query,
+                context={
+                    "teaser_text": self.persistent_context.get("teaser_text", ""),
+                    "extracted_data": self.persistent_context["analysis"]["full_analysis"] if self.persistent_context.get("analysis") else "",
+                    "requirements": self.persistent_context.get("requirements", []),
+                    "compliance_result": self.persistent_context.get("compliance_result", ""),
+                }
+            )
+
+            thinking.append(f"✓ {to_agent} responded")
+
+            return {
+                "response": f"**{to_agent}:** {response_text}",
+                "thinking": thinking,
+                "action": "agent_query",
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": self.get_agent_communication_log(),
+            }
+
+        except Exception as e:
+            thinking.append(f"❌ Query failed: {e}")
+            return {
+                "response": f"❌ Query failed: {str(e)}",
+                "thinking": thinking,
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": None,
+            }
+
+    def _handle_show_communication(self, thinking: list[str]) -> dict:
+        """Show agent-to-agent communication log."""
+
+        thinking.append("📋 Retrieving agent communication log...")
+
+        comm_log = self.get_agent_communication_log()
+
+        if comm_log == "(No agent communications)":
+            return {
+                "response": "No agent-to-agent communications yet.",
+                "thinking": thinking,
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": None,
+            }
+
+        return {
+            "response": f"## Agent Communication Log\n\n{comm_log}",
+            "thinking": thinking,
+            "action": "show_communication",
+            "requires_approval": False,
+            "next_suggestion": None,
+            "agent_communication": comm_log,
+        }
