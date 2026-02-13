@@ -1,12 +1,1 @@
-Procedure query failed for 'information requirements assessment methods origination': maximum recursion depth exceeded
-Procedure query failed for 'required sections content structure output document': maximum recursion depth exceeded
-Procedure query failed for 'assessment approach types available decision criteria': maximum recursion depth exceeded
-Procedure query failed for 'origination methods types available when each applies': maximum recursion depth exceeded
-Procedure query failed for 'classification categories types dimensions taxonomy': maximum recursion depth exceeded
-Guidelines query failed for 'compliance criteria categories requirements': maximum recursion depth exceeded
-Guidelines query failed for 'risk categories risk assessment framework appetite': maximum recursion depth exceeded
-Guidelines query failed for 'financial ratio requirements thresholds limits covenants': maximum recursion depth exceeded
-Guidelines query failed for 'security collateral requirements structural provisions': maximum recursion depth exceeded
-Tool execution failed: search_procedure({'query': 'assessment approach decision criteria thresholds real estate financing', 'num_results': 5}): maximum recursion depth exceeded
-Tool execution failed: search_procedure({'num_results': 5, 'query': 'assessment approach decision criteria thresholds real estate financing'}): maximum recursion depth exceeded
-Tool execution failed: search_procedure({'num_results': 5, 'query': 'assessment approach thresholds'}): maximum recursion depth exceeded
+ConversationalOrchestratorV2' object has no attribute '_handle_requirements'
