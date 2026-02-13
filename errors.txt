@@ -1,6 +1,8 @@
 🤖 Credit Pack Assistant
 Multi-agent conversational system for credit pack drafting
 
+=== LATEST TEST RUN (2026-02-13 - Remote) ===
+
 analyse teaser
 
 Credit Pack Assistant
@@ -37,12 +39,34 @@ Next Steps: Say 'Analyze this deal' to begin
 💡 Providing general guidance
 
 
-rocedure query failed for 'information requirements assessment methods origination': maximum recursion depth exceeded
-Procedure query failed for 'required sections content structure output document': maximum recursion depth exceeded
-Procedure query failed for 'assessment approach types available decision criteria': maximum recursion depth exceeded
-Procedure query failed for 'origination methods types available when each applies': maximum recursion depth exceeded
-Procedure query failed for 'classification categories types dimensions taxonomy': maximum recursion depth exceeded
-Guidelines query failed for 'compliance criteria categories requirements': maximum recursion depth exceeded
-Guidelines query failed for 'risk categories risk assessment framework appetite': maximum recursion depth exceeded
-Guidelines query failed for 'financial ratio requirements thresholds limits covenants': maximum recursion depth exceeded
-Guidelines query failed for 'security collateral requirements structural provisions': maximum recursion depth exceeded
+❌ NEW CRITICAL BUGS FOUND:
+1. 'LLMCallResult' object is not subscriptable (file upload analysis)
+2. 'LLMCallResult' object has no attribute 'strip' (intent detection)
+3. Maximum recursion depth exceeded in RAG queries
+
+These are NEW issues not related to the C1/C2 fixes.
+
+=== BUGS FIXED (2026-02-13) ===
+
+✅ All C1/C2 critical bugs fixed:
+  - C1: Agent Communication Bus (Writer now queries other agents)
+  - C2: Function name mismatch (aliases added)
+  - C2: Parameter name mismatch (top_k → num_results)
+  - Runtime: _handle_general added to V2
+  - Runtime: Responder calls now traced
+  - Runtime: Line 508 top_k reference fixed
+
+Previous errors (now resolved):
+- ❌ 'ConversationalOrchestratorV2' object has no attribute '_handle_general' [FIXED in commit ddc3637]
+- ❌ NameError: top_k undefined in tracking dict [FIXED in commit 1cb0fed]
+- ❌ NameError: top_k on line 508 [FIXED in commit fc65feb]
+
+=== ACTION REQUIRED ===
+
+Need to investigate NEW bugs:
+1. LLMCallResult subscriptable error in file upload
+2. LLMCallResult .strip() error in intent detection
+3. Recursion depth in RAG queries (governance discovery?)
+
+To test:
+$ streamlit run ui/chat_app.py
