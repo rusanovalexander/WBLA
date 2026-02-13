@@ -351,9 +351,9 @@ class ConversationalOrchestratorV2:
 
                 # Mark as analyzed
                 self.persistent_context["uploaded_files"][filename]["analyzed"] = True
-                self.persistent_context["uploaded_files"][filename]["insights"] = insights
+                self.persistent_context["uploaded_files"][filename]["insights"] = insights.text
 
-                thinking.append(f"✓ {filename}: {insights[:100]}...")
+                thinking.append(f"✓ {filename}: {insights.text[:100]}...")
                 new_files.append(filename)
 
             except Exception as e:
@@ -430,7 +430,7 @@ class ConversationalOrchestratorV2:
                 temperature=0.1,
             )
 
-            intent = intent_response.strip().lower()
+            intent = intent_response.text.strip().lower()
 
             # Validate intent
             valid_intents = [
