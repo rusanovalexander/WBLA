@@ -467,6 +467,64 @@ Output ONLY the JSON between <json_output></json_output> tags.
 
 
 # =============================================================================
+# Decision JSON Normalization
+# =============================================================================
+
+def _normalize_decision_dict(parsed: dict[str, Any] | None) -> dict[str, Any] | None:
+    """
+    Validate and normalize decision JSON from LLM/RESULT_JSON.
+
+    Ensures required keys exist and types are sane. Returns a cleaned dict or
+    None if the content is unusable (no meaningful decision information).
+    """
+    if not isinstance(parsed, dict):
+        return None
+
+    decision: dict[str, Any] = {}
+
+    # Normalize core string fields
+    for key in (
+        "assessment_approach",
+        "origination_method",
+        "assessment_reasoning",
+        "origination_reasoning",
+    ):
+        value = parsed.get(key)
+        if isinstance(value, str):
+            value = value.strip()
+        else:
+            value = ""
+        decision[key] = value
+
+    # Normalize confidence
+    raw_conf = parsed.get("confidence") or "MEDIUM"
+    if isinstance(raw_conf, str):
+        conf = raw_conf.strip().upper()
+    else:
+        conf = "MEDIUM"
+    if conf not in {"HIGH", "MEDIUM", "LOW"}:
+        conf = "MEDIUM"
+    decision["confidence"] = conf
+
+    # Preserve optional fields when present
+    for key in ("procedure_sections_cited", "decision_found"):
+        if key in parsed:
+            decision[key] = parsed[key]
+
+    # If both core identifiers are empty, treat as unusable
+    if not decision["assessment_approach"] and not decision["origination_method"]:
+        return None
+
+    # Derive decision_found flag when missing
+    if "decision_found" not in decision:
+        decision["decision_found"] = bool(
+            decision["assessment_approach"] or decision["origination_method"]
+        )
+
+    return decision
+
+
+# =============================================================================
 # Requirements Discovery Prompt
 # =============================================================================
 
@@ -778,15 +836,25 @@ Produce FULL analysis with assessment approach and origination method.
         if result_json_match:
             json_text = result_json_match.group(1).strip()
             parsed = safe_extract_json(json_text, "object")
-            if parsed and (parsed.get("assessment_approach") or parsed.get("origination_method")):
-                # Add decision_found flag if not present
-                parsed.setdefault("decision_found", True)
+            normalized = _normalize_decision_dict(parsed)
+            if normalized:
                 logger.info(
                     "Decision extracted directly from RESULT_JSON: approach=%s, method=%s",
-                    parsed.get("assessment_approach", "?"), parsed.get("origination_method", "?")
+                    normalized.get("assessment_approach", "?"),
+                    normalized.get("origination_method", "?"),
                 )
-                self.tracer.record("ProcessAnalyst", "EXTRACTION_OK", "Direct from RESULT_JSON tags")
-                return parsed
+                self.tracer.record(
+                    "ProcessAnalyst",
+                    "EXTRACTION_OK",
+                    "Direct from RESULT_JSON tags",
+                )
+                return normalized
+            # RESULT_JSON present but unusable
+            self.tracer.record(
+                "ProcessAnalyst",
+                "EXTRACTION_WARNING",
+                "RESULT_JSON present but could not be normalized",
+            )
 
         # --- Method 2: LLM extraction fallback ---
         # Include both the beginning (context) and the end (where RESULT_JSON usually is)
@@ -806,10 +874,29 @@ Produce FULL analysis with assessment approach and origination method.
         )
 
         if not result.success:
+            self.tracer.record(
+                "ProcessAnalyst",
+                "EXTRACTION_WARNING",
+                f"LLM decision extraction failed: {result.error or 'unknown error'}",
+            )
             return None
 
         parsed = safe_extract_json(result.text, "object")
-        return parsed if parsed and parsed.get("decision_found") else None
+        normalized = _normalize_decision_dict(parsed)
+        if not normalized:
+            self.tracer.record(
+                "ProcessAnalyst",
+                "EXTRACTION_WARNING",
+                "LLM decision JSON could not be normalized",
+            )
+            return None
+
+        self.tracer.record(
+            "ProcessAnalyst",
+            "EXTRACTION_OK",
+            "Decision extracted via LLM fallback",
+        )
+        return normalized
 
     def _search_procedure_for_requirements(self, origination_method: str, assessment_approach: str) -> str:
         """Search for requirements."""
