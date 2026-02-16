@@ -176,11 +176,21 @@ class ConversationalOrchestratorV2:
             self.persistent_context["rag_searches_done"].append({
                 "type": "guidelines",
                 "query": query,
-                "num_results": num_results
+                "num_results": num_results,
+                "status": result.get("status", "UNKNOWN"),
+                "error": result.get("error"),
             })
             return result
         except Exception as e:
-            return {"status": "ERROR", "results": []}
+            # Record failed search for transparency
+            self.persistent_context["rag_searches_done"].append({
+                "type": "guidelines",
+                "query": query,
+                "num_results": num_results,
+                "status": "ERROR",
+                "error": str(e),
+            })
+            return {"status": "ERROR", "results": [], "error": str(e)}
 
     def search_procedure(self, query: str, num_results: int = 3):
         """Search procedure documents."""
@@ -190,17 +200,33 @@ class ConversationalOrchestratorV2:
             self.persistent_context["rag_searches_done"].append({
                 "type": "procedure",
                 "query": query,
-                "num_results": num_results
+                "num_results": num_results,
+                "status": result.get("status", "UNKNOWN"),
+                "error": result.get("error"),
             })
             return result
         except RecursionError as e:
             # Log recursion error and return empty result
             import logging
             logging.error(f"RecursionError in search_procedure for query '{query}': {e}")
+            self.persistent_context["rag_searches_done"].append({
+                "type": "procedure",
+                "query": query,
+                "num_results": num_results,
+                "status": "ERROR",
+                "error": "RecursionError",
+            })
             return {"status": "ERROR", "results": [], "error": "RecursionError"}
         except Exception as e:
             import logging
             logging.error(f"Error in search_procedure for query '{query}': {e}")
+            self.persistent_context["rag_searches_done"].append({
+                "type": "procedure",
+                "query": query,
+                "num_results": num_results,
+                "status": "ERROR",
+                "error": str(e),
+            })
             return {"status": "ERROR", "results": [], "error": str(e)}
 
     def search_guidelines(self, query: str, num_results: int = 3):
@@ -211,18 +237,57 @@ class ConversationalOrchestratorV2:
             self.persistent_context["rag_searches_done"].append({
                 "type": "guidelines",
                 "query": query,
-                "num_results": num_results
+                "num_results": num_results,
+                "status": result.get("status", "UNKNOWN"),
+                "error": result.get("error"),
             })
             return result
         except RecursionError as e:
             # Log recursion error and return empty result
             import logging
             logging.error(f"RecursionError in search_guidelines for query '{query}': {e}")
+            self.persistent_context["rag_searches_done"].append({
+                "type": "guidelines",
+                "query": query,
+                "num_results": num_results,
+                "status": "ERROR",
+                "error": "RecursionError",
+            })
             return {"status": "ERROR", "results": [], "error": "RecursionError"}
         except Exception as e:
             import logging
             logging.error(f"Error in search_guidelines for query '{query}': {e}")
+            self.persistent_context["rag_searches_done"].append({
+                "type": "guidelines",
+                "query": query,
+                "num_results": num_results,
+                "status": "ERROR",
+                "error": str(e),
+            })
             return {"status": "ERROR", "results": [], "error": str(e)}
+
+    def _get_rag_error_summary(self) -> str | None:
+        """Summarize RAG search errors for user-facing messages."""
+        searches = self.persistent_context.get("rag_searches_done", [])
+        if not searches:
+            return None
+
+        errors = [s for s in searches if s.get("status") == "ERROR"]
+        if not errors:
+            return None
+
+        total = len(errors)
+        types = sorted({e.get("type", "unknown") for e in errors})
+        last_error = next(
+            (e.get("error") for e in reversed(errors) if e.get("error")),
+            None,
+        )
+
+        type_str = ", ".join(types)
+        summary = f"{total} RAG search{'es' if total != 1 else ''} failed for {type_str} sources."
+        if last_error:
+            summary += f" Latest error: {last_error}"
+        return summary
 
     def get_governance_context(self) -> dict[str, Any]:
         """Get current governance context."""

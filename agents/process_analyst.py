@@ -912,8 +912,20 @@ Produce FULL analysis with assessment approach and origination method.
         for query in rag_queries:
             try:
                 rag_results[query] = self.search_procedure_fn(query, 3)
-            except Exception:
-                pass
+            except Exception as e:
+                # Record the failure explicitly so downstream context and UI
+                # can surface that RAG was unavailable for this query rather
+                # than silently omitting it.
+                self.tracer.record(
+                    "RequirementsDiscovery",
+                    "RAG_ERROR",
+                    f"Procedure search failed for '{query[:80]}': {e}",
+                )
+                rag_results[query] = {
+                    "status": "ERROR",
+                    "results": [],
+                    "error": str(e),
+                }
 
         return format_rag_results(rag_results) if rag_results else "(No results)"
 
