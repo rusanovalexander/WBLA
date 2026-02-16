@@ -436,7 +436,13 @@ class Writer:
         section: dict[str, str],
         context: dict[str, Any],
     ) -> SectionDraft:
-        """Draft a document section."""
+        """Draft a document section.
+
+        This method can optionally trigger a lightweight review sub-task with
+        ComplianceAdvisor for sections where compliance reinforcement is
+        valuable (e.g., compliance/risk sections). The review does not block
+        drafting but augments the draft content when successful.
+        """
         section_name = section.get("name", "Section")
         self.tracer.record("Writer", "START_DRAFT", f"Drafting: {section_name}")
 
@@ -531,6 +537,21 @@ Remember:
         else:
             content = result.text
             self.tracer.record("Writer", "DRAFT_COMPLETE", f"Drafted {len(content)} chars")
+
+        # Optional post-draft compliance review loop
+        if self.agent_bus and self._section_needs_compliance_input(section_name.lower()):
+            try:
+                review_summary = self._run_compliance_review_subtask(section_name, content, context)
+                if review_summary:
+                    content = (
+                        content
+                        + "\n\n---\n"
+                        + "### Compliance Review Notes (Agentic Sub-Task)\n"
+                        + review_summary
+                    )
+            except Exception as e:
+                # Do not fail the draft if the review loop has issues
+                logger.debug("Compliance review sub-task failed: %s", e)
 
         return SectionDraft(
             section_name=section_name,
@@ -696,3 +717,38 @@ Remember:
             return "What guidelines and frameworks apply to this deal?"
         else:
             return f"Are there any compliance notes relevant to the '{section_name}' section?"
+
+    def _run_compliance_review_subtask(
+        self,
+        section_name: str,
+        draft_content: str,
+        context: dict[str, Any],
+    ) -> str:
+        """
+        Run a focused compliance review sub-task on the drafted section.
+
+        This uses the agent bus to ask ComplianceAdvisor to highlight
+        potential issues or confirm alignment with guidelines for the
+        specific section content.
+        """
+        if not self.agent_bus:
+            return ""
+
+        query = (
+            f"Please review the drafted '{section_name}' section for compliance. "
+            f"Identify any potential guideline breaches, missing mandatory "
+            f"statements, or places where the language should be strengthened "
+            f"from a policy perspective. If everything is aligned, state that "
+            f"explicitly.\n\nDraft content:\n{draft_content[:6000]}"
+        )
+
+        response = self.agent_bus.query(
+            from_agent="Writer",
+            to_agent="ComplianceAdvisor",
+            query=query,
+            context=context,
+        )
+        # Avoid echoing technical error messages into the draft
+        if response.startswith("[Agent"):
+            return ""
+        return response.strip()
