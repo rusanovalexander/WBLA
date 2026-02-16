@@ -129,6 +129,62 @@ def _convert_proto_to_dict(obj, max_depth: int = 20, _current_depth: int = 0) ->
         return "[UNCONVERTIBLE]"
 
 
+def _safe_struct_to_dict(struct_data) -> dict:
+    """
+    Safely convert a protobuf Struct (derived_struct_data) to a Python dict.
+
+    The built-in dict() on a protobuf Struct causes RecursionError because
+    its Value objects have self-referential __iter__/items. Instead, we use
+    MessageToDict on the underlying .pb protobuf message, which handles the
+    entire tree atomically without Python-level recursion.
+
+    Falls back to _convert_proto_to_dict if MessageToDict is unavailable.
+    """
+    if not struct_data:
+        return {}
+
+    # Method 1: Use MessageToDict on the raw protobuf message (most reliable)
+    try:
+        from google.protobuf.json_format import MessageToDict
+        # discoveryengine proto-plus objects expose .pb for the raw message
+        if hasattr(struct_data, 'pb'):
+            return MessageToDict(struct_data.pb)
+        if hasattr(struct_data, 'DESCRIPTOR'):
+            return MessageToDict(struct_data)
+    except Exception as e:
+        logger.debug("MessageToDict on struct failed: %s", e)
+
+    # Method 2: Use proto-plus's built-in mapping (proto.marshal)
+    try:
+        import json
+        # proto-plus Struct has a __repr__ that's JSON-like
+        if hasattr(struct_data, '__class__') and 'Struct' in type(struct_data).__name__:
+            # Struct wraps fields → use type(struct_data).to_json if available
+            if hasattr(type(struct_data), 'to_json'):
+                json_str = type(struct_data).to_json(struct_data)
+                return json.loads(json_str)
+    except Exception as e:
+        logger.debug("Struct to_json conversion failed: %s", e)
+
+    # Method 3: Iterate keys individually with recursion protection
+    try:
+        import sys
+        old_limit = sys.getrecursionlimit()
+        sys.setrecursionlimit(200)  # Low limit to fail fast instead of stack overflow
+        try:
+            native = dict(struct_data)
+            result = _convert_proto_to_dict(native)
+            return result if isinstance(result, dict) else {}
+        except RecursionError:
+            logger.warning("RecursionError during struct conversion, using string fallback")
+            return {"_raw": str(struct_data)[:2000]}
+        finally:
+            sys.setrecursionlimit(old_limit)
+    except Exception as e:
+        logger.debug("Fallback struct conversion failed: %s", e)
+        return {}
+
+
 def _extract_text_from_field(field_data, _depth: int = 0) -> str:
     """Extract text content from various field formats.
 
@@ -242,102 +298,115 @@ def search_rag(query: str, num_results: int = 5) -> Dict[str, Any]:
         # Parse results
         results = []
         for result in response.results:
-            doc = result.document
-            
-            raw_data = dict(doc.derived_struct_data) if doc.derived_struct_data else {}
-            data = _convert_proto_to_dict(raw_data)
-            
-            # Get URI
-            uri = data.get("link", data.get("uri", ""))
+            try:
+                doc = result.document
 
-            # Get title early — needed for doc type detection (DD-4)
-            title = data.get("title", "")
-            if not title and uri:
-                title = Path(uri).stem.replace("-", " ").replace("_", " ")
-            if not title:
-                title = doc.id
+                # CRITICAL FIX: Do NOT use dict() on derived_struct_data — it causes
+                # RecursionError due to protobuf Value objects with self-referential
+                # __iter__. Use _safe_struct_to_dict which applies MessageToDict first.
+                data = _safe_struct_to_dict(doc.derived_struct_data) if doc.derived_struct_data else {}
+                if not isinstance(data, dict):
+                    data = {}
 
-            # Determine document type — check both URI and title for keywords
-            doc_type = "Unknown"
-            uri_lower = uri.lower() if uri else ""
-            title_lower = title.lower() if title else ""
-            # Check URI first (most reliable), then title as fallback
-            # Uses configurable DOC_TYPE_KEYWORDS from settings.py
-            for dtype, keywords in DOC_TYPE_KEYWORDS.items():
-                if any(w in uri_lower for w in keywords):
-                    doc_type = dtype
-                    break
-            if doc_type == "Unknown":
+                # Get URI
+                uri = data.get("link", data.get("uri", ""))
+
+                # Get title early — needed for doc type detection (DD-4)
+                title = data.get("title", "")
+                if not title and uri:
+                    title = Path(uri).stem.replace("-", " ").replace("_", " ")
+                if not title:
+                    title = doc.id
+
+                # Determine document type — check both URI and title for keywords
+                doc_type = "Unknown"
+                uri_lower = uri.lower() if uri else ""
+                title_lower = title.lower() if title else ""
+                # Check URI first (most reliable), then title as fallback
+                # Uses configurable DOC_TYPE_KEYWORDS from settings.py
                 for dtype, keywords in DOC_TYPE_KEYWORDS.items():
-                    if any(w in title_lower for w in keywords):
+                    if any(w in uri_lower for w in keywords):
                         doc_type = dtype
                         break
-            
-            # Collect content and page numbers
-            content_parts = []
-            page_numbers = set()  # Collect unique page numbers
+                if doc_type == "Unknown":
+                    for dtype, keywords in DOC_TYPE_KEYWORDS.items():
+                        if any(w in title_lower for w in keywords):
+                            doc_type = dtype
+                            break
 
-            # Extractive answers (with page numbers)
-            if "extractive_answers" in data:
-                for ans in data["extractive_answers"]:
-                    ans_dict = _convert_proto_to_dict(ans) if not isinstance(ans, dict) else ans
-                    text = _extract_text_from_field(ans)
-                    if text and len(text) > 10:
-                        content_parts.append(text)
-                    # Extract page number if available
-                    if isinstance(ans_dict, dict) and "pageNumber" in ans_dict:
-                        page_numbers.add(str(ans_dict["pageNumber"]))
+                # Collect content and page numbers
+                content_parts = []
+                page_numbers = set()  # Collect unique page numbers
 
-            # Extractive segments (with page numbers)
-            if "extractive_segments" in data:
-                for seg in data["extractive_segments"]:
-                    seg_dict = _convert_proto_to_dict(seg) if not isinstance(seg, dict) else seg
-                    text = _extract_text_from_field(seg)
-                    if text and len(text) > 10:
-                        content_parts.append(text)
-                    # Extract page number if available
-                    if isinstance(seg_dict, dict) and "pageNumber" in seg_dict:
-                        page_numbers.add(str(seg_dict["pageNumber"]))
+                # Extractive answers (with page numbers)
+                if "extractive_answers" in data:
+                    for ans in data["extractive_answers"]:
+                        ans_dict = _convert_proto_to_dict(ans) if not isinstance(ans, dict) else ans
+                        text = _extract_text_from_field(ans)
+                        if text and len(text) > 10:
+                            content_parts.append(text)
+                        # Extract page number if available
+                        if isinstance(ans_dict, dict) and "pageNumber" in ans_dict:
+                            page_numbers.add(str(ans_dict["pageNumber"]))
 
-            # Snippets (usually don't have page numbers, but check anyway)
-            if "snippets" in data:
-                for snip in data["snippets"]:
-                    snip_dict = _convert_proto_to_dict(snip) if not isinstance(snip, dict) else snip
-                    text = _extract_text_from_field(snip)
-                    if text and len(text) > 10:
-                        content_parts.append(text)
-                    # Extract page number if available
-                    if isinstance(snip_dict, dict) and "pageNumber" in snip_dict:
-                        page_numbers.add(str(snip_dict["pageNumber"]))
+                # Extractive segments (with page numbers)
+                if "extractive_segments" in data:
+                    for seg in data["extractive_segments"]:
+                        seg_dict = _convert_proto_to_dict(seg) if not isinstance(seg, dict) else seg
+                        text = _extract_text_from_field(seg)
+                        if text and len(text) > 10:
+                            content_parts.append(text)
+                        # Extract page number if available
+                        if isinstance(seg_dict, dict) and "pageNumber" in seg_dict:
+                            page_numbers.add(str(seg_dict["pageNumber"]))
 
-            # Deduplicate
-            unique_parts = []
-            for part in content_parts:
-                is_dup = any(part in existing or existing in part for existing in unique_parts)
-                if not is_dup:
-                    unique_parts.append(part)
+                # Snippets (usually don't have page numbers, but check anyway)
+                if "snippets" in data:
+                    for snip in data["snippets"]:
+                        snip_dict = _convert_proto_to_dict(snip) if not isinstance(snip, dict) else snip
+                        text = _extract_text_from_field(snip)
+                        if text and len(text) > 10:
+                            content_parts.append(text)
+                        # Extract page number if available
+                        if isinstance(snip_dict, dict) and "pageNumber" in snip_dict:
+                            page_numbers.add(str(snip_dict["pageNumber"]))
 
-            content = "\n\n".join(unique_parts[:5])
+                # Deduplicate
+                unique_parts = []
+                for part in content_parts:
+                    is_dup = any(part in existing or existing in part for existing in unique_parts)
+                    if not is_dup:
+                        unique_parts.append(part)
 
-            # Build page reference string
-            page_ref = ""
-            if page_numbers:
-                sorted_pages = sorted(page_numbers, key=lambda x: int(x) if x.isdigit() else 999)
-                if len(sorted_pages) == 1:
-                    page_ref = f"p.{sorted_pages[0]}"
-                elif len(sorted_pages) <= 3:
-                    page_ref = f"pp.{', '.join(sorted_pages)}"
-                else:
-                    page_ref = f"pp.{sorted_pages[0]}-{sorted_pages[-1]}"
+                content = "\n\n".join(unique_parts[:5])
 
-            results.append({
-                "id": doc.id,
-                "uri": uri,
-                "doc_type": doc_type,
-                "title": title,
-                "content": content[:4000],
-                "page_reference": page_ref  # NEW: page reference for citations
-            })
+                # Build page reference string
+                page_ref = ""
+                if page_numbers:
+                    sorted_pages = sorted(page_numbers, key=lambda x: int(x) if x.isdigit() else 999)
+                    if len(sorted_pages) == 1:
+                        page_ref = f"p.{sorted_pages[0]}"
+                    elif len(sorted_pages) <= 3:
+                        page_ref = f"pp.{', '.join(sorted_pages)}"
+                    else:
+                        page_ref = f"pp.{sorted_pages[0]}-{sorted_pages[-1]}"
+
+                results.append({
+                    "id": doc.id,
+                    "uri": uri,
+                    "doc_type": doc_type,
+                    "title": title,
+                    "content": content[:4000],
+                    "page_reference": page_ref  # NEW: page reference for citations
+                })
+
+            except RecursionError:
+                logger.error("RecursionError processing search result (doc=%s), skipping",
+                             getattr(result.document, 'id', 'unknown'))
+                continue
+            except Exception as e:
+                logger.warning("Error processing search result: %s", e)
+                continue
         
         return {
             "status": "OK",
@@ -591,7 +660,9 @@ def tool_search_examples(
 # This fixes the name mismatch between function declarations and actual functions
 search_procedure = tool_search_procedure
 search_guidelines = tool_search_guidelines
-search_rag = tool_search_rag
+# NOTE: search_rag is already defined above as the actual implementation (line 230).
+# Do NOT reassign it here — tool_search_rag calls search_rag, so overwriting
+# search_rag = tool_search_rag would create an infinite recursion loop!
 search_examples = tool_search_examples
 
 # Export both naming conventions
