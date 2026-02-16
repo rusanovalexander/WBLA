@@ -38,6 +38,10 @@ def init_session_state():
     if "orchestrator" not in st.session_state:
         # Initialize orchestrator with agents
         st.session_state.orchestrator = ConversationalOrchestrator()
+    else:
+        # Basic guard against stale/invalid orchestrator objects across reloads
+        if not hasattr(st.session_state.orchestrator, "process_message"):
+            st.session_state.orchestrator = ConversationalOrchestrator()
 
     if "pending_approval" not in st.session_state:
         st.session_state.pending_approval = None

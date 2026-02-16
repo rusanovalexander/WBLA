@@ -81,30 +81,9 @@ class ConversationalOrchestratorV2:
         self.conversation_history = []  # List of {"role": "user/assistant", "content": str}
 
         # 🆕 PERSISTENT CONTEXT - Remembers across messages
-        self.persistent_context = {
-            # Files
-            "uploaded_files": {},  # filename -> {"content": str, "type": str, "analyzed": bool}
-            "teaser_text": None,
-            "teaser_filename": None,
-            "example_text": None,
-            "example_filename": None,
-
-            # Analysis results
-            "analysis": None,
-            "requirements": [],
-            "compliance_result": None,
-            "compliance_checks": [],
-            "structure": [],
-            "drafts": {},
-            "current_section_index": 0,
-
-            # User comments/additions
-            "user_comments": [],  # Track all user additions for final synthesis
-
-            # Sources used (for transparency)
-            "rag_searches_done": [],  # Track RAG searches
-            "examples_used": [],  # Track which examples were consulted
-        }
+        # Initialize and validate shape to protect against corrupted/legacy
+        # state when upgrading versions.
+        self.persistent_context = self._init_persistent_context()
 
     def _load_governance(self) -> dict[str, Any]:
         """Load governance frameworks at startup.
@@ -143,6 +122,33 @@ class ConversationalOrchestratorV2:
         # Return discovery result DIRECTLY — agents look for keys like
         # governance_context["search_vocabulary"], NOT governance_context["full_context"]["search_vocabulary"]
         return result
+
+    def _init_persistent_context(self) -> dict[str, Any]:
+        """Initialize a fresh persistent_context with safe defaults."""
+        return {
+            # Files
+            "uploaded_files": {},  # filename -> {"content": str, "type": str, "analyzed": bool}
+            "teaser_text": None,
+            "teaser_filename": None,
+            "example_text": None,
+            "example_filename": None,
+
+            # Analysis results
+            "analysis": None,
+            "requirements": [],
+            "compliance_result": None,
+            "compliance_checks": [],
+            "structure": [],
+            "drafts": {},
+            "current_section_index": 0,
+
+            # User comments/additions
+            "user_comments": [],  # Track all user additions for final synthesis
+
+            # Sources used (for transparency)
+            "rag_searches_done": [],  # Track RAG searches
+            "examples_used": [],  # Track which examples were consulted
+        }
 
     def _register_agent_responders(self):
         """Register agent responder functions for inter-agent communication."""
