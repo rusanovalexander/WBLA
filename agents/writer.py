@@ -554,10 +554,8 @@ Remember:
                 logger.debug("Compliance review sub-task failed: %s", e)
 
         return SectionDraft(
-            section_name=section_name,
+            name=section_name,
             content=content,
-            word_count=len(content.split()),
-            requires_review=("[INFORMATION REQUIRED" in content or "[TO BE VERIFIED" in content),
         )
 
     def _search_procedure_for_sections(

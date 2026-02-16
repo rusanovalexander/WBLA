@@ -1165,12 +1165,20 @@ Total Checks: {len(checks)}
 
         thinking.append("⏳ Generating document structure via Writer...")
 
+        # NOTE: analyze_deal() stores assessment approach under "process_path" key
+        analysis = self.persistent_context["analysis"]
+        assessment_approach = (
+            analysis.get("process_path")
+            or analysis.get("assessment_approach")
+            or ""
+        )
+
         try:
             structure = self.writer.generate_structure(
                 example_text=self.persistent_context.get("example_text", ""),
-                assessment_approach=self.persistent_context["analysis"].get("assessment_approach", ""),
-                origination_method=self.persistent_context["analysis"].get("origination_method", ""),
-                analysis_text=self.persistent_context["analysis"]["full_analysis"],
+                assessment_approach=assessment_approach,
+                origination_method=analysis.get("origination_method", ""),
+                analysis_text=analysis["full_analysis"],
             )
 
             # Update context
