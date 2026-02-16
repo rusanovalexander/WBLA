@@ -62,7 +62,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(git stash push:*)",
       "Bash(del \"C:\\\\Users\\\\Aleksandr Rusanov\\\\Downloads\\\\refactored_FINAL_FIXED\\\\.git\\\\index.lock\")",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nFix drafting crash: SectionDraft field mismatch + structure key mismatch\n\nTwo bugs blocking the entire drafting pipeline:\n\n1. agents/writer.py - SectionDraft Pydantic validation crash \\(CRITICAL\\):\n   - Writer.draft_section\\(\\) created SectionDraft with wrong field names:\n     section_name= \\(schema has \"name\"\\), word_count= \\(doesn''t exist\\),\n     requires_review= \\(doesn''t exist\\)\n   - Pydantic raises ValidationError immediately → caught as\n     \"Drafting failed\" in orchestrator → user sees error\n   - Fix: Use correct field name \\(name=section_name\\), remove\n     non-existent fields\n\n2. core/conversational_orchestrator_v2.py - _handle_structure\\(\\) key mismatch:\n   - Same bug as _handle_requirements: reads analysis.get\\(\"assessment_approach\"\\)\n     but analyze_deal\\(\\) stores it under \"process_path\"\n   - Result: generate_structure\\(\\) gets empty string for assessment_approach\n   - Fix: Read \"process_path\" first, fall back to \"assessment_approach\"\n   - Now consistent with _handle_requirements fix\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }
