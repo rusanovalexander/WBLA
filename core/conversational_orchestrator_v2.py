@@ -296,6 +296,13 @@ class ConversationalOrchestratorV2:
             summary += f" Latest error: {last_error}"
         return summary
 
+    def _rag_error_notice(self) -> str:
+        """User-facing notice when any RAG searches failed. Append to response if non-empty."""
+        summary = self._get_rag_error_summary()
+        if not summary:
+            return ""
+        return "\n\n---\n⚠️ **Data sources:** " + summary
+
     def get_governance_context(self) -> dict[str, Any]:
         """Get current governance context."""
         return self.governance_context
@@ -859,6 +866,10 @@ For now, would you like me to proceed with the current analysis?
 - Search for similar examples in our database?
 - Proceed to discover requirements?
 """
+            rag_notice = self._rag_error_notice()
+            if rag_notice:
+                response += rag_notice
+                thinking.append("⚠️ Some Procedure/Guidelines searches failed — see notice in response")
 
             return {
                 "response": response,
@@ -964,6 +975,9 @@ I can help you draft credit packs through natural conversation.
 **Next Steps:**
 {self._suggest_next_step()}
 """
+        rag_notice = self._rag_error_notice()
+        if rag_notice:
+            response += rag_notice
 
         return {
             "response": response,
@@ -1040,6 +1054,10 @@ I can help you draft credit packs through natural conversation.
 ---
 **Total:** {len(requirements)} requirements — **{len(filled)}** pre-filled from analysis, **{len(empty)}** still needed
 """
+            rag_notice = self._rag_error_notice()
+            if rag_notice:
+                response += rag_notice
+                thinking.append("⚠️ Some Procedure searches failed — requirements may be incomplete")
 
             return {
                 "response": response,
@@ -1107,6 +1125,10 @@ I can help you draft credit packs through natural conversation.
 
 Total Checks: {len(checks)}
 """
+            rag_notice = self._rag_error_notice()
+            if rag_notice:
+                response += rag_notice
+                thinking.append("⚠️ Some Guidelines searches failed — compliance context may be partial")
 
             return {
                 "response": response,
