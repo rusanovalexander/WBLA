@@ -191,6 +191,31 @@ def run_governance_discovery(
         q: _extract_text_from_result(r) for q, r in guidelines_results.items()
     }
 
+    # Diagnostic: log per-query status
+    for query, result in procedure_results.items():
+        status = result.get("status", "UNKNOWN") if isinstance(result, dict) else "BAD_TYPE"
+        n_results = len(result.get("results", [])) if isinstance(result, dict) else 0
+        has_content = any(
+            r.get("content") and len(r["content"]) > 20
+            for r in (result.get("results", []) if isinstance(result, dict) else [])
+        )
+        logger.info(
+            "GovernanceDiscovery PROCEDURE query='%s' → status=%s, results=%d, has_content=%s",
+            query[:60], status, n_results, has_content
+        )
+
+    for query, result in guidelines_results.items():
+        status = result.get("status", "UNKNOWN") if isinstance(result, dict) else "BAD_TYPE"
+        n_results = len(result.get("results", [])) if isinstance(result, dict) else 0
+        has_content = any(
+            r.get("content") and len(r["content"]) > 20
+            for r in (result.get("results", []) if isinstance(result, dict) else [])
+        )
+        logger.info(
+            "GovernanceDiscovery GUIDELINES query='%s' → status=%s, results=%d, has_content=%s",
+            query[:60], status, n_results, has_content
+        )
+
     # Check if we got any content at all
     has_procedure = procedure_text and procedure_text != "(No RAG results)"
     has_guidelines = guidelines_text and guidelines_text != "(No RAG results)"

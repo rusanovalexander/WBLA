@@ -66,6 +66,7 @@ class ConversationalOrchestratorV2:
             search_guidelines_fn=self.search_guidelines,
             governance_context=self.governance_context,
             tracer=self.tracer,
+            search_procedure_fn=self.search_procedure,
         )
 
         self.writer = Writer(
@@ -105,17 +106,42 @@ class ConversationalOrchestratorV2:
         }
 
     def _load_governance(self) -> dict[str, Any]:
-        """Load governance frameworks at startup."""
+        """Load governance frameworks at startup.
+
+        Returns the governance discovery result DIRECTLY — not wrapped in
+        another dict. Agents expect keys like 'search_vocabulary',
+        'requirement_categories', 'compliance_framework', 'risk_taxonomy',
+        'deal_taxonomy', 'section_templates', 'terminology_map', and
+        'discovery_status' at the top level of governance_context.
+        """
+        import logging
+        _log = logging.getLogger(__name__)
+
         result = run_governance_discovery(
             search_procedure_fn=tool_search_procedure,
             search_guidelines_fn=tool_search_guidelines,
             tracer=self.tracer
         )
-        return {
-            "frameworks": result.get("frameworks", []),
-            "summary": result.get("summary", ""),
-            "full_context": result
-        }
+
+        status = result.get("discovery_status", "unknown")
+        _log.info(
+            "Governance discovery status: %s | categories=%d, compliance=%d, risk=%d, vocab=%d",
+            status,
+            len(result.get("requirement_categories", [])),
+            len(result.get("compliance_framework", [])),
+            len(result.get("risk_taxonomy", [])),
+            len(result.get("search_vocabulary", [])),
+        )
+
+        if status == "failed":
+            _log.warning(
+                "⚠️ Governance discovery FAILED — agents will use generic defaults. "
+                "Check RAG connectivity and data store configuration."
+            )
+
+        # Return discovery result DIRECTLY — agents look for keys like
+        # governance_context["search_vocabulary"], NOT governance_context["full_context"]["search_vocabulary"]
+        return result
 
     def _register_agent_responders(self):
         """Register agent responder functions for inter-agent communication."""

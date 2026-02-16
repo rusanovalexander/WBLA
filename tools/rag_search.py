@@ -148,11 +148,15 @@ def _safe_struct_to_dict(struct_data) -> dict:
         from google.protobuf.json_format import MessageToDict
         # discoveryengine proto-plus objects expose .pb for the raw message
         if hasattr(struct_data, 'pb'):
-            return MessageToDict(struct_data.pb)
+            result = MessageToDict(struct_data.pb)
+            logger.debug("_safe_struct_to_dict: Method 1 (MessageToDict .pb) returned %d keys", len(result))
+            return result
         if hasattr(struct_data, 'DESCRIPTOR'):
-            return MessageToDict(struct_data)
+            result = MessageToDict(struct_data)
+            logger.debug("_safe_struct_to_dict: Method 1 (MessageToDict DESCRIPTOR) returned %d keys", len(result))
+            return result
     except Exception as e:
-        logger.debug("MessageToDict on struct failed: %s", e)
+        logger.warning("_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: %s", e)
 
     # Method 2: Use proto-plus's built-in mapping (proto.marshal)
     try:
@@ -162,9 +166,11 @@ def _safe_struct_to_dict(struct_data) -> dict:
             # Struct wraps fields → use type(struct_data).to_json if available
             if hasattr(type(struct_data), 'to_json'):
                 json_str = type(struct_data).to_json(struct_data)
-                return json.loads(json_str)
+                result = json.loads(json_str)
+                logger.debug("_safe_struct_to_dict: Method 2 (to_json) returned %d keys", len(result))
+                return result
     except Exception as e:
-        logger.debug("Struct to_json conversion failed: %s", e)
+        logger.warning("_safe_struct_to_dict: Method 2 (to_json) FAILED: %s", e)
 
     # Method 3: Iterate keys individually with recursion protection
     try:
@@ -174,14 +180,17 @@ def _safe_struct_to_dict(struct_data) -> dict:
         try:
             native = dict(struct_data)
             result = _convert_proto_to_dict(native)
-            return result if isinstance(result, dict) else {}
+            if isinstance(result, dict):
+                logger.debug("_safe_struct_to_dict: Method 3 (dict+convert) returned %d keys", len(result))
+                return result
+            return {}
         except RecursionError:
-            logger.warning("RecursionError during struct conversion, using string fallback")
+            logger.warning("_safe_struct_to_dict: Method 3 RecursionError, using string fallback")
             return {"_raw": str(struct_data)[:2000]}
         finally:
             sys.setrecursionlimit(old_limit)
     except Exception as e:
-        logger.debug("Fallback struct conversion failed: %s", e)
+        logger.warning("_safe_struct_to_dict: ALL methods FAILED: %s (type=%s)", e, type(struct_data).__name__)
         return {}
 
 
@@ -408,6 +417,19 @@ def search_rag(query: str, num_results: int = 5) -> Dict[str, Any]:
                 logger.warning("Error processing search result: %s", e)
                 continue
         
+        # Diagnostic: log how many results had actual content
+        results_with_content = sum(1 for r in results if r.get("content") and len(r["content"]) > 20)
+        logger.info(
+            "search_rag: query='%s' → %d results (%d with content)",
+            query[:80], len(results), results_with_content
+        )
+        if results and not results_with_content:
+            logger.warning(
+                "search_rag: ALL %d results have empty content for query '%s' — "
+                "check _safe_struct_to_dict conversion",
+                len(results), query[:80]
+            )
+
         return {
             "status": "OK",
             "query": query,

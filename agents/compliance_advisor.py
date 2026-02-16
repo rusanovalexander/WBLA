@@ -383,6 +383,7 @@ class ComplianceAdvisor:
         search_guidelines_fn: Callable,
         governance_context: dict[str, Any] | None = None,
         tracer: TraceStore | None = None,
+        search_procedure_fn: Callable | None = None,
     ):
         """
         Initialize ComplianceAdvisor.
@@ -391,8 +392,11 @@ class ComplianceAdvisor:
             search_guidelines_fn: Callable(query, num_results) -> RAG results dict
             governance_context: Discovered governance framework (from governance_discovery)
             tracer: TraceStore for observability
+            search_procedure_fn: Optional Callable(query, num_results) -> RAG results dict
+                                 for cross-referencing Procedure rules during compliance
         """
         self.search_guidelines_fn = search_guidelines_fn
+        self.search_procedure_fn = search_procedure_fn
         self.governance_context = governance_context
         self.tracer = tracer or get_tracer()
 
@@ -469,7 +473,7 @@ class ComplianceAdvisor:
             raise RuntimeError("No native tool declarations available")
 
         executor = create_tool_executor(
-            search_procedure_fn=lambda q, n=3: {"status": "ERROR", "results": []},
+            search_procedure_fn=self.search_procedure_fn or (lambda q, n=3: {"status": "ERROR", "results": []}),
             search_guidelines_fn=self.search_guidelines_fn,
             search_rag_fn=lambda q, n=3: {"status": "ERROR", "results": []},
         )
