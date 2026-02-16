@@ -470,22 +470,30 @@ Output ONLY the JSON between <json_output></json_output> tags.
 # Requirements Discovery Prompt
 # =============================================================================
 
-REQUIREMENTS_DISCOVERY_PROMPT = """You are an analyst. Based on this deal analysis and process path, identify ALL information requirements.
+REQUIREMENTS_DISCOVERY_PROMPT = """You are an analyst. Based on this deal analysis and process path, identify ALL information requirements needed for a {origination_method}.
 
-## DEAL ANALYSIS
+## DEAL ANALYSIS (contains extracted data from the teaser)
 {analysis_text}
 
 ## PROCESS PATH
 - Assessment Approach: {assessment_approach}
 - Origination Method: {origination_method}
 
-## PROCEDURE CONTEXT
+## PROCEDURE CONTEXT (from RAG search of the Procedure document)
 {procedure_rag_context}
 
 {governance_categories}
 
 ## TASK
-Discover requirements for this specific deal and process path.
+1. Discover ALL information requirements specifically needed for a **{origination_method}** under the **{assessment_approach}** approach, as defined in the Procedure.
+2. For EACH requirement, check if the deal analysis above already contains data that addresses it.
+3. If data IS available in the analysis, set "value" to a summary of that data and "status" to "filled".
+4. If data is NOT available, set "value" to "" and "status" to "empty".
+
+IMPORTANT:
+- Requirements should be SPECIFIC to the {origination_method} process, not generic documentation checklists.
+- Focus on the information CONTENT required (financial metrics, risk assessments, compliance checks), not just document names.
+- Include Procedure section references where possible.
 
 OUTPUT FORMAT (JSON only):
 
@@ -493,11 +501,24 @@ OUTPUT FORMAT (JSON only):
 {{
   "requirements": [
     {{
-      "name": "Deal Size",
-      "category": "Financial Information",
-      "description": "Total transaction value",
+      "name": "Loan Purpose & Transaction Summary",
+      "category": "Purpose of Application",
+      "description": "Clear statement of the financing purpose, deal type, loan amount, LTV, term",
       "required": true,
-      "source_hint": "Teaser summary"
+      "value": "Acquisition financing for Polderzicht Retailpark, ca. €39MM senior loan, 50% LTV, 5yr term",
+      "status": "filled",
+      "source_hint": "Teaser summary",
+      "procedure_ref": "Section 4.1.a"
+    }},
+    {{
+      "name": "Obligor Credit Rating",
+      "category": "Creditworthiness Assessment",
+      "description": "Internal or external credit rating of the borrower",
+      "required": true,
+      "value": "",
+      "status": "empty",
+      "source_hint": "Not in teaser - request from client",
+      "procedure_ref": "Section 4.2"
     }}
   ]
 }}
@@ -569,8 +590,21 @@ class ProcessAnalyst:
         )
         governance_categories = self._build_governance_categories_hint()
 
+        # The analysis text can be 15K+ chars. The LLM needs to see the
+        # COMPREHENSIVE EXTRACTION section (which contains extracted data values)
+        # and the RESULT_JSON section (at the end). Send a generous portion.
+        # If too long, take first 5000 + last 5000 to cover both context and data.
+        if len(analysis_text) > 10000:
+            analysis_for_prompt = (
+                analysis_text[:5000]
+                + "\n\n[... middle section omitted for brevity ...]\n\n"
+                + analysis_text[-5000:]
+            )
+        else:
+            analysis_for_prompt = analysis_text
+
         prompt = REQUIREMENTS_DISCOVERY_PROMPT.format(
-            analysis_text=analysis_text[:4000],
+            analysis_text=analysis_for_prompt,
             assessment_approach=assessment_approach or "assessment",
             origination_method=origination_method or "origination",
             procedure_rag_context=procedure_rag_context,
@@ -596,19 +630,37 @@ class ProcessAnalyst:
             return []
 
         ui_requirements = []
+        filled_count = 0
         for req in requirements:
             if isinstance(req, dict):
+                # Use LLM-provided value/status if available
+                value = req.get("value", "").strip() if isinstance(req.get("value"), str) else ""
+                status = "filled" if value else "empty"
+                # Also respect explicit status from LLM
+                if req.get("status") == "filled" and value:
+                    status = "filled"
+                elif req.get("status") == "empty":
+                    status = "empty"
+                    value = ""
+
+                if status == "filled":
+                    filled_count += 1
+
                 ui_requirements.append({
                     "name": req.get("name", "Unknown"),
                     "category": req.get("category", "General"),
                     "description": req.get("description", ""),
                     "required": req.get("required", True),
-                    "value": "",
-                    "status": "empty",
+                    "value": value,
+                    "status": status,
                     "source_hint": req.get("source_hint", ""),
+                    "procedure_ref": req.get("procedure_ref", ""),
                 })
 
-        self.tracer.record("RequirementsDiscovery", "COMPLETE", f"Found {len(ui_requirements)} reqs")
+        self.tracer.record(
+            "RequirementsDiscovery", "COMPLETE",
+            f"Found {len(ui_requirements)} reqs, {filled_count} pre-filled from analysis"
+        )
         return ui_requirements
 
     def _run_analysis_native(self, teaser_text: str) -> dict[str, Any]:

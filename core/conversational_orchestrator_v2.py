@@ -904,30 +904,57 @@ I can help you draft credit packs through natural conversation.
 
         thinking.append("⏳ Discovering requirements via ProcessAnalyst...")
 
+        # NOTE: analyze_deal() stores assessment approach under "process_path" key
+        # (not "assessment_approach"), so we must read from the correct key.
+        analysis = self.persistent_context["analysis"]
+        assessment_approach = (
+            analysis.get("process_path")
+            or analysis.get("assessment_approach")
+            or ""
+        )
+        origination_method = analysis.get("origination_method", "")
+
+        thinking.append(f"📋 Using approach={assessment_approach!r}, method={origination_method!r}")
+
         try:
             requirements = self.analyst.discover_requirements(
-                analysis_text=self.persistent_context["analysis"]["full_analysis"],
-                assessment_approach=self.persistent_context["analysis"].get("assessment_approach", ""),
-                origination_method=self.persistent_context["analysis"].get("origination_method", ""),
+                analysis_text=analysis["full_analysis"],
+                assessment_approach=assessment_approach,
+                origination_method=origination_method,
             )
 
             # Update context
             self.persistent_context["requirements"] = requirements
 
-            thinking.append(f"✓ Discovered {len(requirements)} requirements")
+            filled = [r for r in requirements if r.get("status") == "filled"]
+            empty = [r for r in requirements if r.get("status") != "filled"]
 
-            # Format requirements for display
-            req_list = "\n".join([
-                f"{i+1}. **{r['name']}**: {r.get('value', 'Not filled')} ({r.get('status', 'pending')})"
-                for i, r in enumerate(requirements)
-            ])
+            thinking.append(f"✓ Discovered {len(requirements)} requirements ({len(filled)} pre-filled, {len(empty)} need data)")
+
+            # Format requirements grouped by status
+            lines: list[str] = []
+
+            if filled:
+                lines.append("### ✅ Pre-Filled from Analysis\n")
+                for i, r in enumerate(filled, 1):
+                    ref = f" _{r['procedure_ref']}_" if r.get("procedure_ref") else ""
+                    lines.append(f"{i}. **{r['name']}**: {r['value']}{ref}")
+
+            if empty:
+                lines.append("\n### ⬜ Still Needed\n")
+                for i, r in enumerate(empty, 1):
+                    hint = f" — _{r.get('source_hint', '')}_" if r.get("source_hint") else ""
+                    ref = f" _{r.get('procedure_ref', '')}_" if r.get("procedure_ref") else ""
+                    lines.append(f"{i}. **{r['name']}**: (empty){hint}{ref}")
+
+            req_list = "\n".join(lines)
 
             response = f"""## Requirements Discovered
 
 {req_list}
 
 ---
-**Total Requirements:** {len(requirements)}
+**Total:** {len(requirements)} requirements — **{len(filled)}** pre-filled from analysis, **{len(empty)}** still needed
 """
 
             return {
