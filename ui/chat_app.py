@@ -11,6 +11,9 @@ Claude Code-style interface with:
 import streamlit as st
 from pathlib import Path
 import sys
+import threading
+import queue
+import time
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -301,54 +304,79 @@ def render_chat():
         with st.chat_message("user"):
             st.markdown(user_input)
 
-        # Process with orchestrator
+        # Process with orchestrator (stream thinking steps live)
         with st.chat_message("assistant"):
-            # Show processing status
             status_placeholder = st.empty()
+            thinking_queue = queue.Queue()
+            shared = {"result": None, "done": False, "error": None}
 
-            with status_placeholder.container():
-                with st.status("🤖 Processing...", expanded=True) as status:
-                    st.write("⏳ Analyzing message...")
+            def run_orchestrator():
+                try:
+                    out = st.session_state.orchestrator.process_message(
+                        message=user_input,
+                        uploaded_files=st.session_state.uploaded_files,
+                        on_thinking_step=thinking_queue.put,
+                    )
+                    shared["result"] = out
+                except Exception as e:
+                    shared["error"] = e
+                    shared["result"] = {
+                        "response": f"❌ Error: {str(e)}",
+                        "thinking": [f"❌ {str(e)}"],
+                        "action": None,
+                        "requires_approval": False,
+                        "next_suggestion": None,
+                        "agent_communication": None,
+                    }
+                finally:
+                    shared["done"] = True
+                    thinking_queue.put(None)
 
-                    # Process message
+            thread = threading.Thread(target=run_orchestrator, daemon=True)
+            thread.start()
+
+            steps_shown = []
+            while not shared["done"] or not thinking_queue.empty():
+                while True:
                     try:
-                        result = st.session_state.orchestrator.process_message(
-                            message=user_input,
-                            uploaded_files=st.session_state.uploaded_files
-                        )
-
-                        # Show thinking steps
-                        for step in result["thinking"]:
-                            if step.startswith("✓"):
-                                st.success(step)
-                            elif step.startswith("⏳"):
-                                st.info(step)
-                            elif step.startswith("❌") or step.startswith("⚠️"):
-                                st.warning(step)
-                            elif step.startswith("💬"):
-                                st.info(step)
-                            else:
-                                st.write(step)
-
-                        # Update status
-                        if "❌" in result["response"]:
-                            status.update(label="❌ Error", state="error")
+                        step = thinking_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    if step is None:
+                        break
+                    steps_shown.append(step)
+                status_placeholder.empty()
+                with status_placeholder.container():
+                    with st.status("🤖 Processing...", expanded=True) as status:
+                        if steps_shown:
+                            for step in steps_shown:
+                                if step.startswith("✓"):
+                                    st.success(step)
+                                elif step.startswith("⏳"):
+                                    st.info(step)
+                                elif step.startswith("❌") or step.startswith("⚠️"):
+                                    st.warning(step)
+                                elif step.startswith("💬"):
+                                    st.info(step)
+                                else:
+                                    st.write(step)
                         else:
-                            status.update(label="✅ Complete", state="complete")
+                            st.write("⏳ Analyzing message...")
+                        if shared["done"]:
+                            result = shared["result"]
+                            if shared.get("error"):
+                                st.error(f"Error: {str(shared['error'])}")
+                                status.update(label="❌ Error", state="error")
+                            elif result and "❌" in result.get("response", ""):
+                                status.update(label="❌ Error", state="error")
+                            else:
+                                status.update(label="✅ Complete", state="complete")
+                if shared["done"]:
+                    break
+                time.sleep(0.25)
 
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
-                        status.update(label="❌ Error", state="error")
-                        result = {
-                            "response": f"❌ Error: {str(e)}",
-                            "thinking": [f"❌ {str(e)}"],
-                            "action": None,
-                            "requires_approval": False,
-                            "next_suggestion": None,
-                            "agent_communication": None,
-                        }
+            result = shared["result"]
 
-            # Clear status and show response
             status_placeholder.empty()
 
             # Display response

@@ -16,6 +16,8 @@ from typing import Any, Callable
 from pathlib import Path
 import json
 
+from core._streaming_thinking import StreamingThinkingList
+
 from agents import (
     ProcessAnalyst,
     ComplianceAdvisor,
@@ -330,7 +332,8 @@ class ConversationalOrchestratorV2:
     def process_message(
         self,
         message: str,
-        uploaded_files: dict[str, dict]
+        uploaded_files: dict[str, dict],
+        on_thinking_step: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         """
         Process user message with full conversation context.
@@ -338,6 +341,7 @@ class ConversationalOrchestratorV2:
         Args:
             message: User's chat message
             uploaded_files: Dict of {filename: {"content": bytes, "type": str, "size": int}}
+            on_thinking_step: Optional callback called for each thinking step (for streaming UI).
 
         Returns:
             {
@@ -352,7 +356,7 @@ class ConversationalOrchestratorV2:
             }
         """
 
-        thinking = []
+        thinking: list[str] = StreamingThinkingList(on_thinking_step) if on_thinking_step else []
 
         # 🆕 AUTO-ANALYZE UPLOADED FILES
         new_files = self._analyze_uploaded_files(uploaded_files, thinking)
