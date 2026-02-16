@@ -29,6 +29,7 @@ from core.llm_client import call_llm
 from tools.rag_search import tool_search_procedure, tool_search_guidelines
 from config.settings import MODEL_PRO, MODEL_FLASH
 from core.tracing import get_tracer, TraceStore
+from models.task_state import TaskState
 
 
 class ConversationalOrchestratorV2:
@@ -292,6 +293,18 @@ class ConversationalOrchestratorV2:
     def get_governance_context(self) -> dict[str, Any]:
         """Get current governance context."""
         return self.governance_context
+
+    def get_task_state(self) -> TaskState:
+        """Return a typed snapshot of the current workflow state.
+
+        This provides an ADK-style high-level view that the UI and any future
+        planners can use to show progress and drive next steps, without
+        changing the underlying persistent_context structure.
+        """
+        return TaskState.from_context(
+            persistent_context=self.persistent_context,
+            conversation_turns=len(self.conversation_history),
+        )
 
     def get_agent_communication_log(self) -> str:
         """Get formatted agent-to-agent communication log."""
