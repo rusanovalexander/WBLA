@@ -1,14 +1,15 @@
-Procedure query failed for 'information requirements assessment methods origination': maximum recursion depth exceeded
-Procedure query failed for 'required sections content structure output document': maximum recursion depth exceeded
-Procedure query failed for 'assessment approach types available decision criteria': maximum recursion depth exceeded
-Procedure query failed for 'origination methods types available when each applies': maximum recursion depth exceeded
-Procedure query failed for 'classification categories types dimensions taxonomy': maximum recursion depth exceeded
-Guidelines query failed for 'compliance criteria categories requirements': maximum recursion depth exceeded
-Guidelines query failed for 'risk categories risk assessment framework appetite': maximum recursion depth exceeded
-Guidelines query failed for 'financial ratio requirements thresholds limits covenants': maximum recursion depth exceeded
-Guidelines query failed for 'security collateral requirements structural provisions': maximum recursion depth exceeded
-ERROR:root:RecursionError in search_procedure for query 'assessment approach decision criteria thresholds real estate financing': maximum recursion depth exceeded
-ERROR:root:RecursionError in search_procedure for query 'assessment approach decision criteria proportionality thresholds': maximum recursion depth exceeded
-ERROR:root:RecursionError in search_procedure for query 'assessment approaches': maximum recursion depth exceeded
-ERROR:root:RecursionError in search_procedure for query 'process requirements': maximum recursion depth exceeded
-ERROR:root:RecursionError in search_procedure for query 'types of assessments': maximum recursion depth exceeded
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
