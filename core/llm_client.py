@@ -171,6 +171,10 @@ def _sanitize_response_text(text: str) -> str:
 
     When Gemini's multi-turn tool-calling response or streaming mode produces
     text with one character per Part, the joined result has one char per line.
+    Real-world fragmentation often mixes single-char lines with short tokens
+    (e.g., "1.9", "46", "220", "[", "]") so we detect runs of very short
+    lines (≤3 chars) rather than strictly single-char lines.
+
     This function detects and reassembles such fragmented regions while
     preserving intentionally short lines (e.g., blank lines, bullet markers).
     """
@@ -179,13 +183,13 @@ def _sanitize_response_text(text: str) -> str:
 
     lines = text.split('\n')
 
-    # Quick check: if fewer than 8 consecutive single-char lines exist,
-    # no fragmentation — return immediately (fast path for 99% of responses).
+    # Quick check: count consecutive very-short non-empty lines (≤3 chars).
+    # If we find 8+ in a row, there's likely fragmentation.
     consecutive = 0
     has_fragmentation = False
     for line in lines:
         stripped = line.strip()
-        if len(stripped) == 1:
+        if 1 <= len(stripped) <= 3:
             consecutive += 1
             if consecutive >= 8:
                 has_fragmentation = True
@@ -200,15 +204,19 @@ def _sanitize_response_text(text: str) -> str:
     result_lines: list[str] = []
     i = 0
     while i < len(lines):
-        # Detect start of a fragmented region (8+ consecutive single-char lines)
+        # Detect start of a fragmented region: 8+ consecutive short lines (1-3 chars, non-empty)
         fragment_start = i
-        while i < len(lines) and len(lines[i].strip()) == 1 and lines[i].strip():
-            i += 1
+        while i < len(lines):
+            stripped = lines[i].strip()
+            if 1 <= len(stripped) <= 3:
+                i += 1
+            else:
+                break
 
         fragment_length = i - fragment_start
 
         if fragment_length >= 8:
-            # Reassemble: join all single characters into one string
+            # Reassemble: join all short fragments into one string
             chars = ''.join(lines[j].strip() for j in range(fragment_start, i))
             result_lines.append(chars)
         else:
@@ -216,10 +224,12 @@ def _sanitize_response_text(text: str) -> str:
             for j in range(fragment_start, i):
                 result_lines.append(lines[j])
 
-        # Process the next non-single-char line normally
-        if i < len(lines) and (len(lines[i].strip()) != 1 or not lines[i].strip()):
-            result_lines.append(lines[i])
-            i += 1
+        # Process the next normal line
+        if i < len(lines):
+            stripped = lines[i].strip()
+            if len(stripped) == 0 or len(stripped) > 3:
+                result_lines.append(lines[i])
+                i += 1
 
     return '\n'.join(result_lines)
 
