@@ -111,6 +111,29 @@ def render_sidebar():
 
         st.divider()
 
+        # 🆕 High-level workflow status (TaskState)
+        st.header("📈 Workflow Status")
+        try:
+            task_state = st.session_state.orchestrator.get_task_state()
+            phase_label = {
+                "SETUP": "Setup",
+                "ANALYSIS": "Analysis",
+                "PROCESS_GAPS": "Requirements",
+                "COMPLIANCE": "Compliance",
+                "DRAFTING": "Drafting",
+                "COMPLETE": "Complete",
+            }.get(task_state.phase.value, task_state.phase.value)
+            st.metric("Phase", phase_label)
+            st.caption(f"Conversation turns: {task_state.conversation_turns}")
+
+            for step in task_state.steps:
+                icon = "✅" if step.done else "○"
+                st.text(f"{icon} {step.name}")
+        except Exception:
+            st.info("Workflow status not available")
+
+        st.divider()
+
         # 🆕 SOURCES USED TRACKING
         st.header("📚 Sources")
         if hasattr(st.session_state.orchestrator, 'persistent_context'):
