@@ -27,81 +27,129 @@ def _get_serving_config() -> str:
     )
 
 
-def _convert_proto_to_dict(obj, max_depth: int = 50, _current_depth: int = 0, _seen: set = None) -> Any:
+def _convert_proto_to_dict(obj, max_depth: int = 20, _current_depth: int = 0) -> Any:
     """
     Convert protobuf/MapComposite objects to Python native types.
 
+    Handles Discovery Engine's protobuf wrapper objects (MapComposite,
+    RepeatedComposite) which can cause infinite recursion if traversed
+    via generic hasattr('items')/hasattr('__iter__') checks.
+
+    Strategy:
+    1. Try protobuf MessageToDict FIRST (atomic, no recursion needed)
+    2. Convert MapComposite/RepeatedComposite to native dict/list FIRST,
+       then recurse on the native types only
+    3. Fall back to str() for anything unrecognizable
+
     Args:
         obj: Object to convert
-        max_depth: Maximum recursion depth (default 50)
+        max_depth: Maximum recursion depth (default 20)
         _current_depth: Current recursion depth (internal)
-        _seen: Set of object IDs already seen (internal, for circular reference detection)
     """
-    # Initialize seen set on first call
-    if _seen is None:
-        _seen = set()
-
-    # Check recursion depth limit
+    # Hard depth limit — return string representation
     if _current_depth >= max_depth:
-        logger.warning("Maximum recursion depth (%d) reached in _convert_proto_to_dict", max_depth)
-        return "[MAX_DEPTH_REACHED]"
+        try:
+            return str(obj)[:500]
+        except Exception:
+            return "[MAX_DEPTH_REACHED]"
 
     if obj is None:
         return None
 
-    # Circular reference detection for non-primitive types
-    obj_id = id(obj)
-    if not isinstance(obj, (str, int, float, bool, type(None))):
-        if obj_id in _seen:
-            logger.debug("Circular reference detected in _convert_proto_to_dict")
-            return "[CIRCULAR_REF]"
-        _seen.add(obj_id)
-
+    # Primitives — no recursion needed
     if isinstance(obj, (str, int, float, bool)):
         return obj
 
-    if isinstance(obj, (list, tuple)):
-        return [_convert_proto_to_dict(item, max_depth, _current_depth + 1, _seen) for item in obj]
-
+    # Native Python dict — safe to recurse
     if isinstance(obj, dict):
-        return {k: _convert_proto_to_dict(v, max_depth, _current_depth + 1, _seen) for k, v in obj.items()}
+        return {
+            str(k): _convert_proto_to_dict(v, max_depth, _current_depth + 1)
+            for k, v in obj.items()
+        }
 
-    # Try dict-like conversion
-    try:
-        if hasattr(obj, 'items'):
-            return {k: _convert_proto_to_dict(v, max_depth, _current_depth + 1, _seen) for k, v in obj.items()}
-    except Exception as e:
-        logger.debug("Proto dict-like conversion failed: %s", e)
+    # Native Python list/tuple — safe to recurse
+    if isinstance(obj, (list, tuple)):
+        return [
+            _convert_proto_to_dict(item, max_depth, _current_depth + 1)
+            for item in obj
+        ]
 
-    # Try list-like conversion
-    try:
-        if hasattr(obj, '__iter__') and not isinstance(obj, str):
-            return [_convert_proto_to_dict(item, max_depth, _current_depth + 1, _seen) for item in obj]
-    except Exception as e:
-        logger.debug("Proto list-like conversion failed: %s", e)
+    # --- Non-native types below: protobuf wrappers, MapComposite, etc. ---
 
-    # Try protobuf conversion
+    # 1. Try protobuf MessageToDict FIRST — handles the entire tree atomically
     try:
         from google.protobuf.json_format import MessageToDict
         if hasattr(obj, 'pb'):
             return MessageToDict(obj.pb)
-        return MessageToDict(obj)
-    except Exception as e:
-        logger.debug("Proto MessageToDict conversion failed: %s", e)
+        if hasattr(obj, 'DESCRIPTOR'):
+            return MessageToDict(obj)
+    except Exception:
+        pass
 
-    return str(obj)
+    # 2. Detect MapComposite / RepeatedComposite by type name
+    #    (avoids relying on hasattr('items') which matches too broadly)
+    type_name = type(obj).__name__
+
+    if 'MapComposite' in type_name or 'MessageMapContainer' in type_name:
+        try:
+            native_dict = dict(obj)
+            return {
+                str(k): _convert_proto_to_dict(v, max_depth, _current_depth + 1)
+                for k, v in native_dict.items()
+            }
+        except (TypeError, ValueError, RecursionError) as e:
+            logger.debug("MapComposite dict conversion failed: %s", e)
+
+    if 'RepeatedComposite' in type_name or 'Repeated' in type_name:
+        try:
+            native_list = list(obj)
+            return [
+                _convert_proto_to_dict(item, max_depth, _current_depth + 1)
+                for item in native_list
+            ]
+        except (TypeError, ValueError, RecursionError) as e:
+            logger.debug("RepeatedComposite list conversion failed: %s", e)
+
+    # 3. Safe dict-like fallback: only if type has 'items' AND is NOT a protobuf
+    #    message (which also has 'items' but leads to recursion)
+    if hasattr(obj, 'items') and not hasattr(obj, 'DESCRIPTOR') and 'Proto' not in type_name:
+        try:
+            native_dict = dict(obj)  # Convert to native dict FIRST
+            return {
+                str(k): _convert_proto_to_dict(v, max_depth, _current_depth + 1)
+                for k, v in native_dict.items()
+            }
+        except (TypeError, ValueError, RecursionError) as e:
+            logger.debug("Dict-like conversion failed for %s: %s", type_name, e)
+
+    # 4. Last resort — string representation (truncated)
+    try:
+        return str(obj)[:500]
+    except Exception:
+        return "[UNCONVERTIBLE]"
 
 
-def _extract_text_from_field(field_data) -> str:
-    """Extract text content from various field formats."""
+def _extract_text_from_field(field_data, _depth: int = 0) -> str:
+    """Extract text content from various field formats.
+
+    Args:
+        field_data: Raw field data (may be protobuf, dict, str, list)
+        _depth: Internal recursion guard (max 5 levels for list unpacking)
+    """
     if not field_data:
         return ""
-    
+
+    # Guard against deep recursion in nested lists
+    if _depth > 5:
+        return str(field_data)[:200] if field_data else ""
+
     data = _convert_proto_to_dict(field_data)
-    
+
     if isinstance(data, str):
-        return data
-    
+        # Remove HTML tags
+        text = re.sub(r'<[^>]+>', '', data)
+        return text.strip()
+
     if isinstance(data, dict):
         for key in ['content', 'text', 'snippet', 'answer', 'segment', 'value']:
             if key in data and data[key]:
@@ -110,17 +158,17 @@ def _extract_text_from_field(field_data) -> str:
                     # Remove HTML tags
                     text = re.sub(r'<[^>]+>', '', text)
                     return text.strip()
-        
+
         # Get any long string value
         for v in data.values():
             if isinstance(v, str) and len(v) > 20:
                 return v.strip()
-    
+
     if isinstance(data, list):
-        texts = [_extract_text_from_field(item) for item in data]
+        texts = [_extract_text_from_field(item, _depth + 1) for item in data[:10]]
         return "\n".join([t for t in texts if t])
-    
-    return str(data) if data else ""
+
+    return str(data)[:500] if data else ""
 
 
 def search_rag(query: str, num_results: int = 5) -> Dict[str, Any]:

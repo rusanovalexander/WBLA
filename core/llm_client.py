@@ -161,6 +161,69 @@ def _call_gemini(
     return response
 
 
+# =============================================================================
+# Response Text Sanitization
+# =============================================================================
+
+def _sanitize_response_text(text: str) -> str:
+    """
+    Fix character-per-line fragmentation in Gemini responses.
+
+    When Gemini's multi-turn tool-calling response or streaming mode produces
+    text with one character per Part, the joined result has one char per line.
+    This function detects and reassembles such fragmented regions while
+    preserving intentionally short lines (e.g., blank lines, bullet markers).
+    """
+    if not text:
+        return text
+
+    lines = text.split('\n')
+
+    # Quick check: if fewer than 8 consecutive single-char lines exist,
+    # no fragmentation — return immediately (fast path for 99% of responses).
+    consecutive = 0
+    has_fragmentation = False
+    for line in lines:
+        stripped = line.strip()
+        if len(stripped) == 1:
+            consecutive += 1
+            if consecutive >= 8:
+                has_fragmentation = True
+                break
+        else:
+            consecutive = 0
+
+    if not has_fragmentation:
+        return text
+
+    # Reassemble fragmented regions
+    result_lines: list[str] = []
+    i = 0
+    while i < len(lines):
+        # Detect start of a fragmented region (8+ consecutive single-char lines)
+        fragment_start = i
+        while i < len(lines) and len(lines[i].strip()) == 1 and lines[i].strip():
+            i += 1
+
+        fragment_length = i - fragment_start
+
+        if fragment_length >= 8:
+            # Reassemble: join all single characters into one string
+            chars = ''.join(lines[j].strip() for j in range(fragment_start, i))
+            result_lines.append(chars)
+        else:
+            # Not a fragmented region — keep original lines
+            for j in range(fragment_start, i):
+                result_lines.append(lines[j])
+
+        # Process the next non-single-char line normally
+        if i < len(lines) and (len(lines[i].strip()) != 1 or not lines[i].strip()):
+            result_lines.append(lines[i])
+            i += 1
+
+    return '\n'.join(result_lines)
+
+
 def call_llm(
     prompt: str,
     model: str = MODEL_PRO,
@@ -223,6 +286,9 @@ def call_llm(
             except (ValueError, AttributeError):
                 result_text = "[No text in response — model may have returned empty/blocked output]"
                 logger.warning("Response had no text for %s (candidates may be empty)", agent_name)
+
+            # Fix char-per-line fragmentation from multi-part responses
+            result_text = _sanitize_response_text(result_text)
             ctx["response_text"] = result_text
 
             # Extract token counts if available
@@ -690,6 +756,8 @@ def call_llm_with_tools(
     # AG-M2: Return success=False when no text was generated
     if all_text_parts:
         final_text = "\n".join(all_text_parts)
+        # Fix char-per-line fragmentation from multi-part tool-calling responses
+        final_text = _sanitize_response_text(final_text)
         total_tokens_out = estimate_tokens(final_text)
 
         # Record LLM_RESPONSE for call count tracking
