@@ -707,10 +707,45 @@ Produce FULL analysis with assessment approach and origination method.
         return {"full_analysis": analysis.text, "procedure_sources": procedure_results}
 
     def _extract_structured_decision(self, analysis_text: str) -> dict[str, Any] | None:
-        """Extract decision."""
+        """Extract decision from analysis text.
+
+        Strategy:
+        1. Try direct extraction from <RESULT_JSON> tags (fast, no LLM call)
+        2. Fall back to LLM extraction, but include the TAIL of the analysis
+           (where RESULT_JSON lives) rather than just the first 8000 chars
+        """
         self.tracer.record("ProcessAnalyst", "EXTRACTION", "Extracting decision")
 
-        prompt = PROCESS_DECISION_EXTRACTION_PROMPT.format(analysis_text=analysis_text[:8000])
+        # --- Method 1: Direct extraction from <RESULT_JSON> tags ---
+        import re
+        result_json_match = re.search(
+            r'<RESULT_JSON>\s*([\s\S]*?)\s*</RESULT_JSON>',
+            analysis_text,
+            re.IGNORECASE
+        )
+        if result_json_match:
+            json_text = result_json_match.group(1).strip()
+            parsed = safe_extract_json(json_text, "object")
+            if parsed and (parsed.get("assessment_approach") or parsed.get("origination_method")):
+                # Add decision_found flag if not present
+                parsed.setdefault("decision_found", True)
+                logger.info(
+                    "Decision extracted directly from RESULT_JSON: approach=%s, method=%s",
+                    parsed.get("assessment_approach", "?"), parsed.get("origination_method", "?")
+                )
+                self.tracer.record("ProcessAnalyst", "EXTRACTION_OK", "Direct from RESULT_JSON tags")
+                return parsed
+
+        # --- Method 2: LLM extraction fallback ---
+        # Include both the beginning (context) and the end (where RESULT_JSON usually is)
+        # to avoid truncating the decision block
+        if len(analysis_text) > 8000:
+            # Take first 4000 chars (context) + last 4000 chars (decision)
+            truncated = analysis_text[:4000] + "\n\n[... middle truncated ...]\n\n" + analysis_text[-4000:]
+        else:
+            truncated = analysis_text
+
+        prompt = PROCESS_DECISION_EXTRACTION_PROMPT.format(analysis_text=truncated)
 
         result = call_llm(
             prompt, MODEL_FLASH, 0.0, 1500,

@@ -143,7 +143,21 @@ def _safe_struct_to_dict(struct_data) -> dict:
     if not struct_data:
         return {}
 
-    # Method 1: Use MessageToDict on the raw protobuf message (most reliable)
+    # Method 0: Handle raw protobuf MapContainer types directly
+    # doc.derived_struct_data is often a MessageMapContainer from google._upb._message,
+    # which has neither .pb nor .DESCRIPTOR, but dict() works on it natively.
+    type_name = type(struct_data).__name__
+    if 'MapContainer' in type_name or 'MessageMap' in type_name:
+        try:
+            native = dict(struct_data)
+            result = _convert_proto_to_dict(native)
+            if isinstance(result, dict):
+                logger.debug("_safe_struct_to_dict: Method 0 (MapContainer→dict) returned %d keys", len(result))
+                return result
+        except (RecursionError, Exception) as e:
+            logger.debug("_safe_struct_to_dict: Method 0 (MapContainer) fallthrough: %s", e)
+
+    # Method 1: Use MessageToDict on the raw protobuf message (most reliable for proto-plus)
     try:
         from google.protobuf.json_format import MessageToDict
         # discoveryengine proto-plus objects expose .pb for the raw message
@@ -156,7 +170,7 @@ def _safe_struct_to_dict(struct_data) -> dict:
             logger.debug("_safe_struct_to_dict: Method 1 (MessageToDict DESCRIPTOR) returned %d keys", len(result))
             return result
     except Exception as e:
-        logger.warning("_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: %s", e)
+        logger.debug("_safe_struct_to_dict: Method 1 (MessageToDict) skipped: %s", e)
 
     # Method 2: Use proto-plus's built-in mapping (proto.marshal)
     try:
