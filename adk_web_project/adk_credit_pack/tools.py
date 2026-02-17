@@ -288,3 +288,65 @@ async def set_example(example_text: str, tool_context: Any = None) -> dict[str, 
     state = _state(tool_context)
     state["example_text"] = example_text.strip() if example_text else ""
     return {"status": "success", "message": "Example text stored for structure and drafting."}
+
+
+async def export_credit_pack(filename: str = "", tool_context: Any = None) -> dict[str, Any]:
+    """
+    Export the current credit pack to a DOCX file. Uses structure and drafts from state.
+    Call after at least one section has been drafted. File is saved to the outputs folder.
+
+    Args:
+        filename: Optional filename (e.g. 'Credit_Pack_20250216.docx'). If empty, a default name with timestamp is used.
+        tool_context: ADK tool context for state.
+
+    Returns:
+        Dict with status, path (if successful), and message.
+    """
+    from datetime import datetime
+
+    state = _state(tool_context)
+    structure = state.get("structure") or []
+    drafts = state.get("drafts") or []
+    if not structure or not drafts:
+        return {
+            "status": "error",
+            "message": "No structure or drafts in state. Generate structure and draft at least one section first.",
+        }
+    parts = []
+    draft_by_name = {getattr(d, "name", ""): d for d in drafts if getattr(d, "name", None)}
+    for sec in structure:
+        name = sec.get("name", "")
+        d = draft_by_name.get(name)
+        if d is None:
+            continue
+        content = getattr(d, "content", "") or ""
+        if content:
+            parts.append(f"# {name}\n\n{content}")
+    if not parts:
+        return {"status": "error", "message": "No draft content to export."}
+    final_document = "\n\n---\n\n".join(parts)
+    analysis = state.get("analysis") or {}
+    metadata = {}
+    if analysis.get("process_path"):
+        metadata["process_path"] = analysis["process_path"]
+    if analysis.get("origination_method"):
+        metadata["origination_method"] = analysis["origination_method"]
+    try:
+        from config.settings import PRODUCT_NAME
+        from core.export import generate_docx
+
+        if not filename or not filename.strip():
+            filename = f"{PRODUCT_NAME.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.docx"
+        elif not filename.lower().endswith(".docx"):
+            filename = filename.rstrip() + ".docx"
+        path = generate_docx(final_document, filename.strip(), metadata)
+        if path:
+            return {
+                "status": "success",
+                "path": path,
+                "message": f"Credit pack exported to {path}",
+            }
+        return {"status": "error", "message": "DOCX generation failed."}
+    except Exception as e:
+        logger.exception("export_credit_pack failed")
+        return {"status": "error", "message": str(e)}

@@ -18,6 +18,7 @@ from .tools import (
     draft_section,
     set_teaser,
     set_example,
+    export_credit_pack,
 )
 
 # Model: use env or default
@@ -36,5 +37,6 @@ root_agent = LlmAgent(
         check_compliance,
         generate_structure,
         draft_section,
+        export_credit_pack,
     ],
 )
