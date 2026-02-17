@@ -1225,6 +1225,24 @@ Total Checks: {len(checks)}
                 "agent_communication": None,
             }
 
+    def _build_previously_drafted(self, before_index: int) -> str:
+        """Build concatenated text of all sections already drafted (in structure order) for Writer context."""
+        structure = self.persistent_context.get("structure") or []
+        drafts = self.persistent_context.get("drafts") or {}
+        parts = []
+        for i in range(min(before_index, len(structure))):
+            sec = structure[i]
+            name = sec.get("name", "")
+            if not name:
+                continue
+            d = drafts.get(name)
+            if d is None:
+                continue
+            content = getattr(d, "content", d) if not isinstance(d, str) else d
+            if content:
+                parts.append(f"# {name}\n\n{content}")
+        return "\n\n---\n\n".join(parts) if parts else ""
+
     def _handle_drafting(self, message: str, thinking: list[str]) -> dict:
         """Handle section drafting request."""
 
@@ -1251,6 +1269,9 @@ Total Checks: {len(checks)}
         section = self.persistent_context["structure"][section_index]
         thinking.append(f"✏️ Drafting section {section_index + 1}/{len(self.persistent_context['structure'])}: '{section['name']}'")
 
+        # Build previously_drafted: all sections already written (in structure order) for continuity
+        previously_drafted = self._build_previously_drafted(section_index)
+
         # Check if Writer might query other agents
         if self.agent_bus.message_count == 0:
             thinking.append("💬 Writer may consult ProcessAnalyst or ComplianceAdvisor...")
@@ -1265,6 +1286,8 @@ Total Checks: {len(checks)}
                     "requirements": self.persistent_context.get("requirements", []),
                     "compliance_result": self.persistent_context.get("compliance_result", ""),
                     "compliance_checks": self.persistent_context.get("compliance_checks", []),
+                    "example_text": self.persistent_context.get("example_text") or "",
+                    "previously_drafted": previously_drafted,
                 }
             )
 
