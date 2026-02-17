@@ -371,6 +371,7 @@ class Writer:
         assessment_approach: str,
         origination_method: str,
         analysis_text: str,
+        on_stream: Callable[[str], None] | None = None,
     ) -> list[dict]:
         """Generate document section structure."""
         self.tracer.record("Writer", "START_STRUCTURE", f"Generating structure for {origination_method}")
@@ -398,11 +399,19 @@ class Writer:
             example_sections=example_sections,
         )
 
-        result = call_llm(
-            prompt, MODEL_PRO, 0.0, 4000,
-            "Writer", self.tracer,
-            thinking_budget=THINKING_BUDGET_LIGHT
-        )
+        if on_stream:
+            result = call_llm_streaming(
+                prompt, MODEL_PRO, 0.0, 4000,
+                "Writer", self.tracer,
+                on_chunk=on_stream,
+                thinking_budget=THINKING_BUDGET_LIGHT,
+            )
+        else:
+            result = call_llm(
+                prompt, MODEL_PRO, 0.0, 4000,
+                "Writer", self.tracer,
+                thinking_budget=THINKING_BUDGET_LIGHT
+            )
 
         if not result.success:
             self.tracer.record("Writer", "STRUCTURE_FAIL", result.error or "Unknown")
@@ -435,6 +444,7 @@ class Writer:
         self,
         section: dict[str, str],
         context: dict[str, Any],
+        on_stream: Callable[[str], None] | None = None,
     ) -> SectionDraft:
         """Draft a document section.
 
@@ -529,6 +539,7 @@ Remember:
             agent_name="Writer",
             tracer=self.tracer,
             thinking_budget=THINKING_BUDGET_STANDARD,
+            on_chunk=on_stream,
         )
 
         if not result.success:

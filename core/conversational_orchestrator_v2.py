@@ -395,6 +395,7 @@ class ConversationalOrchestratorV2:
         message: str,
         uploaded_files: dict[str, dict],
         on_thinking_step: Callable[[str], None] | None = None,
+        on_agent_stream: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         """
         Process user message with full conversation context.
@@ -402,7 +403,8 @@ class ConversationalOrchestratorV2:
         Args:
             message: User's chat message
             uploaded_files: Dict of {filename: {"content": bytes, "type": str, "size": int}}
-            on_thinking_step: Optional callback called for each thinking step (for streaming UI).
+            on_thinking_step: Optional callback for each status step (e.g. "⏳ Running...").
+            on_agent_stream: Optional callback for live agent LLM output (model reasoning stream).
 
         Returns:
             {
@@ -432,22 +434,22 @@ class ConversationalOrchestratorV2:
         intent, reasoning = self._detect_intent_with_reasoning(message, thinking)
         thinking.append(f"✓ Detected intent: {intent}")
 
-        # Route to appropriate handler
+        # Route to appropriate handler (pass on_agent_stream for live model output)
         result = None
         if intent == "analyze_deal":
-            result = self._handle_analysis(message, thinking, reasoning)
+            result = self._handle_analysis(message, thinking, reasoning, on_agent_stream)
         elif intent == "enhance_analysis":
             result = self._handle_enhance_analysis(message, thinking, reasoning)
         elif intent == "discover_requirements":
-            result = self._handle_requirements(message, thinking)
+            result = self._handle_requirements(message, thinking, on_agent_stream)
         elif intent == "check_compliance":
-            result = self._handle_compliance(message, thinking)
+            result = self._handle_compliance(message, thinking, on_agent_stream)
         elif intent == "search_examples":
             result = self._handle_search_examples(message, thinking)
         elif intent == "generate_structure":
-            result = self._handle_structure(message, thinking)
+            result = self._handle_structure(message, thinking, on_agent_stream)
         elif intent == "draft_section":
-            result = self._handle_drafting(message, thinking)
+            result = self._handle_drafting(message, thinking, on_agent_stream)
         elif intent == "query_agent":
             result = self._handle_agent_query(message, thinking)
         elif intent == "show_communication":
@@ -947,7 +949,7 @@ For now, would you like me to proceed with the current analysis?
     # _handle_analysis, _handle_requirements, _handle_compliance, etc.
     # These remain unchanged from the original implementation
 
-    def _handle_analysis(self, message: str, thinking: list[str], reasoning: str | None = None) -> dict:
+    def _handle_analysis(self, message: str, thinking: list[str], reasoning: str | None = None, on_agent_stream: Callable[[str], None] | None = None) -> dict:
         """Handle deal analysis request."""
 
         if not self.persistent_context.get("teaser_text"):
@@ -967,7 +969,8 @@ For now, would you like me to proceed with the current analysis?
         try:
             result = self.analyst.analyze_deal(
                 teaser_text=self.persistent_context["teaser_text"],
-                use_native_tools=True
+                use_native_tools=True,
+                on_stream=on_agent_stream,
             )
 
             # Update context
@@ -1135,7 +1138,7 @@ I can help you draft credit packs through natural conversation.
             "next_suggestion": None,
             "agent_communication": None,
         }
-    def _handle_requirements(self, message: str, thinking: list[str]) -> dict:
+    def _handle_requirements(self, message: str, thinking: list[str], on_agent_stream: Callable[[str], None] | None = None) -> dict:
         """Handle requirements discovery request."""
 
         if not self.persistent_context.get("analysis"):
@@ -1167,6 +1170,7 @@ I can help you draft credit packs through natural conversation.
                 analysis_text=analysis["full_analysis"],
                 assessment_approach=assessment_approach,
                 origination_method=origination_method,
+                on_stream=on_agent_stream,
             )
 
             # Update context
@@ -1227,7 +1231,7 @@ I can help you draft credit packs through natural conversation.
                 "agent_communication": None,
             }
 
-    def _handle_compliance(self, message: str, thinking: list[str]) -> dict:
+    def _handle_compliance(self, message: str, thinking: list[str], on_agent_stream: Callable[[str], None] | None = None) -> dict:
         """Handle compliance check request."""
 
         if not self.persistent_context.get("requirements"):
@@ -1248,7 +1252,8 @@ I can help you draft credit packs through natural conversation.
                 requirements=self.persistent_context["requirements"],
                 teaser_text=self.persistent_context["teaser_text"],
                 extracted_data=self.persistent_context["analysis"]["full_analysis"],
-                use_native_tools=True
+                use_native_tools=True,
+                on_stream=on_agent_stream,
             )
 
             # Update context
@@ -1297,7 +1302,7 @@ Total Checks: {len(checks)}
                 "agent_communication": None,
             }
 
-    def _handle_structure(self, message: str, thinking: list[str]) -> dict:
+    def _handle_structure(self, message: str, thinking: list[str], on_agent_stream: Callable[[str], None] | None = None) -> dict:
         """Handle structure generation request."""
 
         if not self.persistent_context.get("analysis"):
@@ -1326,6 +1331,7 @@ Total Checks: {len(checks)}
                 assessment_approach=assessment_approach,
                 origination_method=analysis.get("origination_method", ""),
                 analysis_text=analysis["full_analysis"],
+                on_stream=on_agent_stream,
             )
 
             # Update context
@@ -1386,13 +1392,13 @@ Total Checks: {len(checks)}
                 parts.append(f"# {name}\n\n{content}")
         return "\n\n---\n\n".join(parts) if parts else ""
 
-    def _handle_drafting(self, message: str, thinking: list[str]) -> dict:
+    def _handle_drafting(self, message: str, thinking: list[str], on_agent_stream: Callable[[str], None] | None = None) -> dict:
         """Handle section drafting request."""
 
         if not self.persistent_context.get("structure"):
             thinking.append("⚠️ No structure found, generating first...")
             # Auto-generate structure
-            structure_result = self._handle_structure(message, thinking)
+            structure_result = self._handle_structure(message, thinking, on_agent_stream)
             if structure_result["action"] != "structure_generated":
                 return structure_result
 
@@ -1431,7 +1437,8 @@ Total Checks: {len(checks)}
                     "compliance_checks": self.persistent_context.get("compliance_checks", []),
                     "example_text": self.persistent_context.get("example_text") or "",
                     "previously_drafted": previously_drafted,
-                }
+                },
+                on_stream=on_agent_stream,
             )
 
             # Update context

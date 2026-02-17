@@ -503,10 +503,14 @@ def render_chat():
 
             def run_orchestrator():
                 try:
+                    # Queue items: ("step", str) = status line, ("chunk", str) = live agent output, None = done
+                    on_step = lambda s: thinking_queue.put(("step", s))
+                    on_stream = lambda s: thinking_queue.put(("chunk", s))
                     out = orchestrator.process_message(
                         message=user_input,
                         uploaded_files=uploaded_files,
-                        on_thinking_step=thinking_queue.put,
+                        on_thinking_step=on_step,
+                        on_agent_stream=on_stream,
                     )
                     shared["result"] = out
                 except Exception as e:
@@ -527,15 +531,23 @@ def render_chat():
             thread.start()
 
             steps_shown = []
+            stream_buffer = []
             while not shared["done"] or not thinking_queue.empty():
                 while True:
                     try:
-                        step = thinking_queue.get_nowait()
+                        item = thinking_queue.get_nowait()
                     except queue.Empty:
                         break
-                    if step is None:
+                    if item is None:
                         break
-                    steps_shown.append(step)
+                    if isinstance(item, tuple) and len(item) == 2:
+                        kind, text = item
+                        if kind == "step":
+                            steps_shown.append(text)
+                        elif kind == "chunk" and text:
+                            stream_buffer.append(text)
+                    else:
+                        steps_shown.append(str(item))
                 status_placeholder.empty()
                 with status_placeholder.container():
                     with st.status("🤖 Processing...", expanded=True) as status:
@@ -551,7 +563,11 @@ def render_chat():
                                     st.info(step)
                                 else:
                                     st.write(step)
-                        else:
+                        if stream_buffer:
+                            st.markdown("---")
+                            st.markdown("**Model output (live):**")
+                            st.markdown("".join(stream_buffer))
+                        if not steps_shown and not stream_buffer:
                             st.write("⏳ Analyzing message...")
                         if shared["done"]:
                             result = shared["result"]

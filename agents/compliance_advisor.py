@@ -16,7 +16,7 @@ from typing import Any, Callable
 import logging
 
 from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block, PRODUCT_NAME, MODEL_PRO, MODEL_FLASH, THINKING_BUDGET_NONE, THINKING_BUDGET_LIGHT
-from core.llm_client import call_llm, call_llm_with_tools
+from core.llm_client import call_llm, call_llm_streaming, call_llm_with_tools
 from core.tracing import TraceStore, get_tracer
 from core.parsers import parse_tool_calls, format_rag_results, safe_extract_json
 from models.schemas import ComplianceCheck
@@ -415,6 +415,7 @@ class ComplianceAdvisor:
         teaser_text: str,
         extracted_data: str,
         use_native_tools: bool = True,
+        on_stream: Callable[[str], None] | None = None,
     ) -> tuple[str, list[dict]]:
         """
         Complete compliance assessment including RAG search and extraction.
@@ -446,11 +447,11 @@ class ComplianceAdvisor:
                 logger.warning("Native compliance tools failed: %s", e)
                 self.tracer.record("ComplianceAdvisor", "FALLBACK", str(e))
                 result_text = self._run_compliance_text_based(
-                    filled_data, teaser_text, extracted_data
+                    filled_data, teaser_text, extracted_data, on_stream=on_stream
                 )
         else:
             result_text = self._run_compliance_text_based(
-                filled_data, teaser_text, extracted_data
+                filled_data, teaser_text, extracted_data, on_stream=on_stream
             )
 
         # Extract structured compliance checks
@@ -527,6 +528,7 @@ Follow the OUTPUT_STRUCTURE from your instructions.
         filled_data: str,
         teaser_text: str,
         extracted_data: str,
+        on_stream: Callable[[str], None] | None = None,
     ) -> str:
         """Run compliance using text-based tool calls (fallback)."""
 
@@ -625,11 +627,19 @@ Criteria to check: {self.criteria_hint}
 Use ONLY the information from your RAG searches above when citing Guidelines limits.
 """
 
-        assessment = call_llm(
-            assessment_prompt, AGENT_MODELS.get("compliance_advisor", MODEL_PRO),
-            0.0, 32000, "ComplianceAdvisor", self.tracer,
-            thinking_budget=THINKING_BUDGET_LIGHT
-        )
+        if on_stream:
+            assessment = call_llm_streaming(
+                assessment_prompt, AGENT_MODELS.get("compliance_advisor", MODEL_PRO),
+                0.0, 32000, "ComplianceAdvisor", self.tracer,
+                thinking_budget=THINKING_BUDGET_LIGHT,
+                on_chunk=on_stream,
+            )
+        else:
+            assessment = call_llm(
+                assessment_prompt, AGENT_MODELS.get("compliance_advisor", MODEL_PRO),
+                0.0, 32000, "ComplianceAdvisor", self.tracer,
+                thinking_budget=THINKING_BUDGET_LIGHT
+            )
 
         if not assessment.success:
             self.tracer.record("ComplianceAdvisor", "LLM_FAIL", f"Assessment failed: {assessment.error}")

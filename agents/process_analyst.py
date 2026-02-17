@@ -426,7 +426,7 @@ Single entry point: analyze_deal() + discover_requirements()
 import logging
 from typing import Any, Callable
 from config.settings import MODEL_PRO, MODEL_FLASH, AGENT_MODELS, THINKING_BUDGET_NONE, THINKING_BUDGET_LIGHT, THINKING_BUDGET_STANDARD
-from core.llm_client import call_llm, call_llm_with_tools
+from core.llm_client import call_llm, call_llm_streaming, call_llm_with_tools
 from core.tracing import TraceStore, get_tracer
 from core.parsers import parse_tool_calls, format_rag_results, safe_extract_json
 
@@ -600,7 +600,12 @@ class ProcessAnalyst:
         self.tracer = tracer or get_tracer()
         self.instruction = get_process_analyst_instruction(governance_context)
 
-    def analyze_deal(self, teaser_text: str, use_native_tools: bool = True) -> dict[str, Any]:
+    def analyze_deal(
+        self,
+        teaser_text: str,
+        use_native_tools: bool = True,
+        on_stream: Callable[[str], None] | None = None,
+    ) -> dict[str, Any]:
         """Complete deal analysis including process path determination."""
         self.tracer.record("ProcessAnalyst", "START", "Beginning analysis")
 
@@ -610,9 +615,9 @@ class ProcessAnalyst:
             except Exception as e:
                 logger.warning("Native tools failed: %s", e)
                 self.tracer.record("ProcessAnalyst", "FALLBACK", str(e))
-                raw = self._run_analysis_text_based(teaser_text)
+                raw = self._run_analysis_text_based(teaser_text, on_stream=on_stream)
         else:
-            raw = self._run_analysis_text_based(teaser_text)
+            raw = self._run_analysis_text_based(teaser_text, on_stream=on_stream)
 
         decision = self._extract_structured_decision(raw["full_analysis"])
 
@@ -638,7 +643,11 @@ class ProcessAnalyst:
         return raw
 
     def discover_requirements(
-        self, analysis_text: str, assessment_approach: str, origination_method: str
+        self,
+        analysis_text: str,
+        assessment_approach: str,
+        origination_method: str,
+        on_stream: Callable[[str], None] | None = None,
     ) -> list[dict]:
         """Discover dynamic requirements."""
         self.tracer.record("RequirementsDiscovery", "START", "Discovering requirements")
@@ -669,11 +678,19 @@ class ProcessAnalyst:
             governance_categories=governance_categories,
         )
 
-        result = call_llm(
-            prompt, MODEL_PRO, 0.0, 8000,
-            "RequirementsDiscovery", self.tracer,
-            thinking_budget=THINKING_BUDGET_LIGHT
-        )
+        if on_stream:
+            result = call_llm_streaming(
+                prompt, MODEL_PRO, 0.0, 8000,
+                "RequirementsDiscovery", self.tracer,
+                on_chunk=on_stream,
+                thinking_budget=THINKING_BUDGET_LIGHT,
+            )
+        else:
+            result = call_llm(
+                prompt, MODEL_PRO, 0.0, 8000,
+                "RequirementsDiscovery", self.tracer,
+                thinking_budget=THINKING_BUDGET_LIGHT
+            )
 
         if not result.success:
             self.tracer.record("RequirementsDiscovery", "FAIL", result.error or "Unknown")
@@ -760,7 +777,11 @@ Search Procedure document AT LEAST 3 TIMES before recommending.
 
         return {"full_analysis": result.text, "procedure_sources": {}}
 
-    def _run_analysis_text_based(self, teaser_text: str) -> dict[str, Any]:
+    def _run_analysis_text_based(
+        self,
+        teaser_text: str,
+        on_stream: Callable[[str], None] | None = None,
+    ) -> dict[str, Any]:
         """Text-based fallback."""
         planning_prompt = f"""{self.instruction}
 
@@ -805,11 +826,20 @@ Search Procedure document AT LEAST 3 TIMES before recommending.
 Produce FULL analysis with assessment approach and origination method.
 """
 
-        analysis = call_llm(
-            analysis_prompt, AGENT_MODELS.get("process_analyst", MODEL_FLASH),
-            0.0, 16000, "ProcessAnalyst", self.tracer,
-            thinking_budget=THINKING_BUDGET_STANDARD
-        )
+        if on_stream:
+            analysis = call_llm_streaming(
+                analysis_prompt,
+                AGENT_MODELS.get("process_analyst", MODEL_FLASH),
+                0.0, 16000, "ProcessAnalyst", self.tracer,
+                on_chunk=on_stream,
+                thinking_budget=THINKING_BUDGET_STANDARD,
+            )
+        else:
+            analysis = call_llm(
+                analysis_prompt, AGENT_MODELS.get("process_analyst", MODEL_FLASH),
+                0.0, 16000, "ProcessAnalyst", self.tracer,
+                thinking_budget=THINKING_BUDGET_STANDARD
+            )
 
         if not analysis.success:
             return {"full_analysis": f"[Failed: {analysis.error}]", "procedure_sources": {}}
