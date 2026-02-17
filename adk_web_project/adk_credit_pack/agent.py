@@ -1,8 +1,8 @@
 """
 Credit Pack root agent for ADK Web.
 
-Phase 1: Shell only. Tools and sub-agents (ProcessAnalyst, ComplianceAdvisor, Writer)
-will be added in later phases. See MIGRATION_PLAN_ADK_DATA_SCIENCE.md in repo root.
+Phase 2: Root agent with tools that call ProcessAnalyst, ComplianceAdvisor, Writer.
+Run from repo root with PYTHONPATH=. so runner and tools can import agents, core, config.
 """
 
 import os
@@ -10,14 +10,31 @@ import os
 from google.adk.agents import LlmAgent
 
 from .prompts import get_root_instruction
+from .tools import (
+    analyze_deal,
+    discover_requirements,
+    check_compliance,
+    generate_structure,
+    draft_section,
+    set_teaser,
+    set_example,
+)
 
-# Model: use env or default to a common Vertex/Gemini model
+# Model: use env or default
 _model = os.getenv("ADK_CREDIT_PACK_MODEL", "gemini-2.0-flash")
 
 root_agent = LlmAgent(
     model=_model,
     name="credit_pack_root",
-    description="Orchestrates credit pack drafting: deal analysis, requirements, compliance, structure, and section drafting.",
+    description="Orchestrates credit pack drafting: deal analysis, requirements, compliance, structure, and section drafting. Use set_teaser/analyze_deal first, then requirements, compliance, structure, draft_section.",
     instruction=get_root_instruction(),
-    tools=[],  # Phase 2: add AgentTools for ProcessAnalyst, ComplianceAdvisor, Writer
+    tools=[
+        set_teaser,
+        set_example,
+        analyze_deal,
+        discover_requirements,
+        check_compliance,
+        generate_structure,
+        draft_section,
+    ],
 )

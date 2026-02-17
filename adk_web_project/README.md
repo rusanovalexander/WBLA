@@ -29,16 +29,18 @@ Separate project for migrating the Credit Pack flow to **ADK Web**. Lives on bra
 
 ## Run with ADK Web
 
-From **this directory** (`adk_web_project/`):
+**Recommended:** From the **repo root** (parent of `adk_web_project/`) so the agent can import `agents`, `core`, `config`, `tools`:
 
 ```bash
-uv run adk web --port 8000
+cd <repo_root>
+PYTHONPATH=. uv run --project adk_web_project adk web --port 8000
 ```
 
-Or with pip:
+Or from this directory if the repo root is on `PYTHONPATH`:
 
 ```bash
-adk web --port 8000
+cd adk_web_project
+PYTHONPATH=.. uv run adk web --port 8000
 ```
 
 Open http://localhost:8000, select **adk_credit_pack** in the dropdown, and chat.
@@ -49,10 +51,11 @@ Open http://localhost:8000, select **adk_credit_pack** in the dropdown, and chat
 uv run adk run adk_credit_pack
 ```
 
-## Current state (Phase 1)
+## Current state (Phase 2)
 
-- **Root agent only** — no tools yet. The agent explains that it is the Credit Pack agent and that tools will be added in the next phase.
-- Next steps: add AgentTools for ProcessAnalyst, ComplianceAdvisor, Writer (see repo root `MIGRATION_PLAN_ADK_DATA_SCIENCE.md`).
+- **Root agent with tools**: `set_teaser`, `set_example`, `analyze_deal`, `discover_requirements`, `check_compliance`, `generate_structure`, `draft_section`.
+- Tools call the existing Credit Pack agents (ProcessAnalyst, ComplianceAdvisor, Writer) via `runner.py`; state is shared in `tool_context.state` or a fallback dict.
+- Run from repo root with `PYTHONPATH=.` so that `agents`, `core`, `config`, `tools` resolve.
 
 ## Branch
 
