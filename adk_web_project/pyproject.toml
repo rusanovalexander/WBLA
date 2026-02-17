@@ -1,0 +1,19 @@
+[project]
+name = "adk-credit-pack"
+version = "0.1.0"
+description = "Credit Pack agent for ADK Web — migrate from Streamlit orchestrator"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "google-adk>=1.14",
+    "python-dotenv>=1.0.1",
+    "google-cloud-aiplatform[adk]>=1.93.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["adk_credit_pack"]
