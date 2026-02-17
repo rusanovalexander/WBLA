@@ -25,6 +25,18 @@ from config.settings import MODEL_PRO
 from core.tracing import get_tracer, TraceStore
 
 
+def _format_one_compliance_check(c: dict) -> str:
+    """Format a single compliance check for Key Findings. Uses ComplianceCheck keys: criterion, evidence, status, severity."""
+    label = c.get("criterion") or c.get("requirement", "General")
+    finding = c.get("evidence") or c.get("finding", "")
+    if not finding:
+        status = c.get("status", "")
+        deal_val = c.get("deal_value", "")
+        finding = f"{status}" + (f" — {deal_val}" if deal_val else "") if (status or deal_val) else "N/A"
+    severity = c.get("severity", "info")
+    return f"- **{label}**: {finding} [{severity}]"
+
+
 class ConversationalOrchestrator:
     """
     Conversational orchestrator for autonomous multi-agent system.
@@ -434,10 +446,9 @@ class ConversationalOrchestrator:
 
             thinking.append(f"✓ Found {len(checks)} compliance considerations")
 
-            # Format checks
+            # Format checks (keys from ComplianceCheck: criterion, evidence, status, severity)
             checks_list = "\n".join([
-                f"- **{c.get('requirement', 'General')}**: {c.get('finding', 'N/A')} [{c.get('severity', 'info')}]"
-                for c in checks[:5]  # Show first 5
+                _format_one_compliance_check(c) for c in checks[:10]  # Show first 10
             ])
 
             response = f"""## Compliance Assessment Complete
