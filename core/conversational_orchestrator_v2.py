@@ -32,6 +32,11 @@ from tools.rag_search import tool_search_procedure, tool_search_guidelines
 from config.settings import MODEL_PRO, MODEL_FLASH
 from core.tracing import get_tracer, TraceStore
 from models.task_state import TaskState
+from models.process_steps import (
+    ProcessStepRecord,
+    snapshot_context,
+    restore_context,
+)
 
 
 def _format_one_check(c: dict) -> str:
@@ -44,6 +49,47 @@ def _format_one_check(c: dict) -> str:
         finding = f"{status}" + (f" — {deal_val}" if deal_val else "") if (status or deal_val) else "N/A"
     severity = c.get("severity", "info")
     return f"- **{label}**: {finding} [{severity}]"
+
+
+_STATE_CHANGING_INTENTS = frozenset({
+    "analyze_deal", "enhance_analysis", "discover_requirements",
+    "check_compliance", "generate_structure", "draft_section",
+})
+
+_INTENT_LABELS = {
+    "analyze_deal": "Deal analysis",
+    "enhance_analysis": "Enhance analysis",
+    "discover_requirements": "Discover requirements",
+    "check_compliance": "Compliance check",
+    "generate_structure": "Document structure",
+    "draft_section": "Draft section",
+}
+
+
+def _record_step(orch: "ConversationalOrchestratorV2", intent: str, result: dict, thinking: list) -> None:
+    """Append one process step to history for Cursor-like timeline and re-run."""
+    if intent not in _STATE_CHANGING_INTENTS:
+        return
+    label = _INTENT_LABELS.get(intent, intent.replace("_", " ").title())
+    if intent == "draft_section" and result.get("response"):
+        # Try to get section name from response (e.g. "## Executive Summary")
+        import re
+        m = re.search(r"^##\s+(.+?)(?:\n|$)", result["response"], re.MULTILINE)
+        if m:
+            label = f"Draft: {m.group(1).strip()}"
+    thinking_list = list(thinking) if hasattr(thinking, "__iter__") else []
+    response_text = result.get("response", "")
+    preview = (response_text[:200] + "…") if len(response_text) > 200 else response_text
+    step = ProcessStepRecord(
+        step_index=len(orch.step_history),
+        phase=intent,
+        label=label,
+        thinking=thinking_list,
+        response=response_text,
+        response_preview=preview,
+        context_after=snapshot_context(orch.persistent_context),
+    )
+    orch.step_history.append(step)
 
 
 class ConversationalOrchestratorV2:
@@ -98,6 +144,9 @@ class ConversationalOrchestratorV2:
         # Initialize and validate shape to protect against corrupted/legacy
         # state when upgrading versions.
         self.persistent_context = self._init_persistent_context()
+
+        # 🆕 PROCESS STEP HISTORY (Cursor-like: go back, re-run from step)
+        self.step_history: list[ProcessStepRecord] = []
 
     def _load_governance(self) -> dict[str, Any]:
         """Load governance frameworks at startup.
@@ -414,6 +463,9 @@ class ConversationalOrchestratorV2:
             "content": result["response"]
         })
 
+        # 🆕 RECORD STEP FOR CURSOR-LIKE TIMELINE (re-run from here)
+        _record_step(self, intent, result, thinking)
+
         # 🆕 ADD SOURCES USED
         result["sources_used"] = {
             "rag_searches": len(self.persistent_context["rag_searches_done"]),
@@ -424,6 +476,86 @@ class ConversationalOrchestratorV2:
         # Add extended reasoning if available
         result["reasoning"] = reasoning
 
+        return result
+
+    def get_step_history(self) -> list[ProcessStepRecord]:
+        """Return the process step timeline for Cursor-like UI (expandable steps, re-run from here)."""
+        return self.step_history
+
+    def process_replay_from_step(
+        self,
+        step_index: int,
+        additional_instruction: str = "",
+        on_thinking_step: Callable[[str], None] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Re-run from a given step (Cursor-like: go back and re-run with extra input).
+
+        Restores context to the state after the previous step, truncates step history,
+        then runs the handler for that step with additional_instruction as the message.
+        """
+        if step_index < 0 or step_index >= len(self.step_history):
+            return {
+                "response": f"❌ Invalid step index: {step_index}. Steps: 0–{len(self.step_history) - 1}.",
+                "thinking": ["❌ Replay failed: invalid step index"],
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": None,
+                "sources_used": {},
+                "reasoning": None,
+            }
+        phase = self.step_history[step_index].phase
+        label = self.step_history[step_index].label
+
+        # Restore context to state *before* this step
+        if step_index == 0:
+            current_snapshot = {k: self.persistent_context.get(k) for k in ("uploaded_files", "teaser_text", "teaser_filename", "example_text", "example_filename") if k in self.persistent_context}
+            self.persistent_context = self._init_persistent_context()
+            for k, v in current_snapshot.items():
+                if v is not None:
+                    self.persistent_context[k] = v
+        else:
+            restore_context(self.persistent_context, self.step_history[step_index - 1].context_after)
+
+        # Truncate step history so this step and later are removed
+        self.step_history = self.step_history[:step_index]
+
+        # Use StreamingThinkingList so UI can show thinking live (Cursor-like)
+        thinking: list = (
+            StreamingThinkingList(on_thinking_step) if on_thinking_step
+            else []
+        )
+
+        message = additional_instruction.strip() or f"Re-run: {label}"
+        self.conversation_history.append({"role": "user", "content": f"[Re-run from step {step_index}: {label}] {message}"})
+
+        # Run the handler for this phase
+        if phase == "analyze_deal":
+            result = self._handle_analysis(message, thinking, None)
+        elif phase == "enhance_analysis":
+            result = self._handle_enhance_analysis(message, thinking, None)
+        elif phase == "discover_requirements":
+            result = self._handle_requirements(message, thinking)
+        elif phase == "check_compliance":
+            result = self._handle_compliance(message, thinking)
+        elif phase == "generate_structure":
+            result = self._handle_structure(message, thinking)
+        elif phase == "draft_section":
+            result = self._handle_drafting(message, thinking)
+        else:
+            result = self._handle_general(message, thinking)
+
+        thinking_list = list(thinking) if hasattr(thinking, "__iter__") and not isinstance(thinking, str) else []
+
+        self.conversation_history.append({"role": "assistant", "content": result["response"]})
+        _record_step(self, phase, result, thinking_list)
+
+        result["sources_used"] = {
+            "rag_searches": len(self.persistent_context["rag_searches_done"]),
+            "examples": len(self.persistent_context["examples_used"]),
+            "uploaded_files": len([f for f in self.persistent_context["uploaded_files"].values() if f.get("analyzed")]),
+        }
         return result
 
     def _analyze_uploaded_files(self, files: dict, thinking: list[str]) -> list[str]:

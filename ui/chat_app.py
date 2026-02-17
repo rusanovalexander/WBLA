@@ -142,6 +142,33 @@ def render_sidebar():
 
         st.divider()
 
+        # 🆕 Process timeline (Cursor-like: see steps, thought, re-run from here)
+        st.header("🕐 Process Timeline")
+        if hasattr(st.session_state.orchestrator, "get_step_history"):
+            steps = st.session_state.orchestrator.get_step_history()
+            if not steps:
+                st.caption("No steps yet. Run analysis, compliance, or drafting to see the timeline.")
+            else:
+                for i, step in enumerate(steps):
+                    with st.expander(f"**{i}. {step.label}**", expanded=(i == len(steps) - 1)):
+                        if step.thinking:
+                            st.markdown("**Thinking**")
+                            for t in step.thinking:
+                                st.caption(t)
+                            st.markdown("---")
+                        st.markdown("**Response**")
+                        st.markdown(step.response[:3000] + ("…" if len(step.response) > 3000 else ""))
+                        st.markdown("---")
+                        extra = st.text_input("Additional instruction (optional)", key=f"replay_extra_{i}", placeholder="e.g. focus on environmental risk")
+                        if st.button("Re-run from here", key=f"replay_btn_{i}"):
+                            st.session_state["_replay_step_index"] = i
+                            st.session_state["_replay_instruction"] = extra or ""
+                            st.rerun()
+        else:
+            st.caption("Step history available with v2 orchestrator.")
+
+        st.divider()
+
         # 🆕 SOURCES USED TRACKING
         st.header("📚 Sources")
         if hasattr(st.session_state.orchestrator, 'persistent_context'):
@@ -360,6 +387,98 @@ def render_chat():
         user_input = st.session_state.pending_approval
         st.session_state.pending_approval = None
 
+    # 🆕 Handle Re-run from step (Cursor-like: from Process Timeline)
+    replay_step = st.session_state.pop("_replay_step_index", None)
+    replay_instruction = st.session_state.pop("_replay_instruction", "")
+
+    if replay_step is not None and hasattr(st.session_state.orchestrator, "process_replay_from_step"):
+        orchestrator = st.session_state.orchestrator
+        thinking_queue = queue.Queue()
+        shared_replay = {"result": None, "done": False, "error": None}
+
+        def run_replay():
+            try:
+                out = orchestrator.process_replay_from_step(
+                    step_index=replay_step,
+                    additional_instruction=replay_instruction,
+                    on_thinking_step=thinking_queue.put,
+                )
+                shared_replay["result"] = out
+            except Exception as e:
+                shared_replay["error"] = e
+                shared_replay["result"] = {
+                    "response": f"❌ Re-run failed: {str(e)}",
+                    "thinking": [str(e)],
+                    "requires_approval": False,
+                    "next_suggestion": None,
+                    "agent_communication": None,
+                    "sources_used": {},
+                }
+            finally:
+                shared_replay["done"] = True
+                thinking_queue.put(None)
+
+        thread = threading.Thread(target=run_replay, daemon=True)
+        thread.start()
+
+        with st.chat_message("assistant"):
+            st.markdown("**Thinking**")
+            thinking_placeholder = st.empty()
+            steps_shown = []
+            while not shared_replay["done"] or not thinking_queue.empty():
+                while True:
+                    try:
+                        step = thinking_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    if step is None:
+                        break
+                    steps_shown.append(step)
+                with thinking_placeholder.container():
+                    for s in steps_shown:
+                        if s.startswith("✓"):
+                            st.success(s)
+                        elif s.startswith("⏳"):
+                            st.info(s)
+                        elif s.startswith("❌") or s.startswith("⚠️"):
+                            st.warning(s)
+                        else:
+                            st.caption(s)
+                if shared_replay["done"]:
+                    break
+                time.sleep(0.25)
+
+            result = shared_replay["result"] or {
+                "response": "Re-run produced no result.",
+                "thinking": [],
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": None,
+                "sources_used": {},
+            }
+            if shared_replay.get("error"):
+                st.error(f"Error: {str(shared_replay['error'])}")
+            st.markdown("---")
+            st.markdown("**Response**")
+            st.markdown(result["response"])
+        st.session_state.messages.append({
+            "role": "user",
+            "content": f"[Re-run from step {replay_step}] {replay_instruction or '(re-run)'}",
+        })
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": result["response"],
+            "thinking": result.get("thinking"),
+            "reasoning": result.get("reasoning"),
+            "requires_approval": result.get("requires_approval", False),
+            "next_suggestion": result.get("next_suggestion"),
+            "agent_communication": result.get("agent_communication"),
+            "sources_used": result.get("sources_used"),
+        })
+        if result.get("requires_approval") and result.get("next_suggestion"):
+            st.session_state.pending_approval = result["next_suggestion"]
+        st.rerun()
+
     if user_input:
         # Add user message
         st.session_state.messages.append({
@@ -377,6 +496,7 @@ def render_chat():
         uploaded_files = st.session_state.uploaded_files
 
         with st.chat_message("assistant"):
+            st.markdown("**Thinking**")
             status_placeholder = st.empty()
             thinking_queue = queue.Queue()
             shared = {"result": None, "done": False, "error": None}
