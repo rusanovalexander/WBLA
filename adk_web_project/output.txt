@@ -1,49 +1,130 @@
+(.venv) C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project>python -m google.adk.cli web --port 8000
+2026-02-17 15:56:42,024 - INFO - service_factory.py:266 - Using in-memory memory service
+2026-02-17 15:56:42,024 - INFO - local_storage.py:84 - Using per-agent session storage rooted at C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project
+2026-02-17 15:56:42,024 - INFO - local_storage.py:110 - Using file artifact service at C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.adk\artifacts
+C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\cli\fast_api.py:142: UserWarning: [EXPERIMENTAL] InMemoryCredentialService: This feature is experimental and may change or be removed in future versions without notice. It may introduce breaking changes at any time.
+  credential_service = InMemoryCredentialService()
+C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\auth\credential_service\in_memory_credential_service.py:33: UserWarning: [EXPERIMENTAL] BaseCredentialService: This feature is experimental and may change or be removed in future versions without notice. It may introduce breaking changes at any time.
+  super().__init__()
+INFO:     Started server process [36344]
+INFO:     Waiting for application startup.
 
-Agent Development Kit
-left_panel_close
-adk_credit_pack
-Trace
-State
-Artifacts
-Sessions
-Eval
-Invocations
-hi
-ok
-what can you do?
-Session ID
-de742834-db43-458b-bf37-f495c8801327
-User ID
-user
-New Session
-delete
-download
-#1
-hi
++-----------------------------------------------------------------------------+
+| ADK Web Server started                                                      |
+|                                                                             |
+| For local testing, access at http://127.0.0.1:8000.                         |
++-----------------------------------------------------------------------------+
 
-#2
-Hello, I am the Credit Pack orchestration agent. I will help you produce credit pack documents. Currently, the tools for deal analysis, requirements discovery, compliance checking, structure generation, and drafting are being connected.
-
-Once the migration is complete, what would you like to do?
-
-#3
-ok
-
-#4
-Understood. I'm ready to assist once the tools are connected. I'll be here.
-
-#5
-what can you do?
-
-#6
-Once the tools are connected, I will be able to:
-
-Analyze the deal: Understand the deal from provided information like a teaser, and determine the appropriate process path and origination method.
-Discover requirements: Identify the dynamic requirements for the credit pack based on procedures and governance policies.
-Check compliance: Assess the deal's compliance against relevant criteria.
-Generate structure: Define the necessary sections for the credit pack document.
-Draft sections: Write each section of the credit pack with the appropriate style and content.
-Essentially, I will automate the process of creating a credit pack document from start to finish.
-
-Type a Message...
-ADK Web Developer UI
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52568 - "GET / HTTP/1.1" 307 Temporary Redirect
+INFO:     127.0.0.1:52568 - "GET /dev-ui/ HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:52568 - "GET /dev-ui/chunk-BX7YU7E6.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:50686 - "GET /dev-ui/chunk-W7GRJBO5.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:52305 - "GET /dev-ui/polyfills-5CFQRCPP.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:52568 - "GET /dev-ui/styles-SI5RXIFC.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:65513 - "GET /dev-ui/main-QQBY56NS.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:65513 - "GET /dev-ui/assets/config/runtime-config.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65513 - "GET /list-apps?relative_path=./ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65513 - "GET /dev-ui/assets/ADK-512-color.svg HTTP/1.1" 304 Not Modified
+2026-02-17 15:57:12,885 - INFO - local_storage.py:60 - Creating local session service at C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\adk_credit_pack\.adk\session.db
+INFO:     127.0.0.1:52568 - "GET /builder/app/adk_credit_pack?ts=1771340232858 HTTP/1.1" 200 OK
+2026-02-17 15:57:12,912 - INFO - adk_web_server.py:665 - New session created: fc68c49b-6ed5-41d6-afd2-73e29ad8c7a3
+INFO:     127.0.0.1:65513 - "POST /apps/adk_credit_pack/users/user/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65513 - "GET /apps/adk_credit_pack/users/user/sessions/fc68c49b-6ed5-41d6-afd2-73e29ad8c7a3 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65513 - "GET /debug/trace/session/fc68c49b-6ed5-41d6-afd2-73e29ad8c7a3 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52568 - "GET /debug/trace/session/fc68c49b-6ed5-41d6-afd2-73e29ad8c7a3 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52568 - "GET /apps/adk_credit_pack/users/user/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52568 - "GET /apps/adk_credit_pack/eval_sets HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65513 - "GET /apps/adk_credit_pack/eval_results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65513 - "GET /apps/adk_credit_pack/users/user/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65513 - "POST /run_sse HTTP/1.1" 200 OK
+2026-02-17 15:57:18,202 - INFO - envs.py:83 - Loaded .env file for adk_credit_pack at C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.env
+2026-02-17 15:57:18,204 - INFO - envs.py:83 - Loaded .env file for adk_credit_pack at C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.env
+2026-02-17 15:57:19,050 - INFO - _api_client.py:640 - The project/location from the environment variables will take precedence over the API key from the environment variables.
+2026-02-17 15:57:20,228 - INFO - google_llm.py:185 - Sending out request, model: gemini-2.0-pro, backend: GoogleLLMVariant.VERTEX_AI, stream: False
+2026-02-17 15:57:23,435 - ERROR - adk_web_server.py:1629 - Error in event_generator: Your default credentials were not found. To set up Application Default Credentials, see https://cloud.google.com/docs/authentication/external/set-up-adc for more information.
+Traceback (most recent call last):
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\cli\adk_web_server.py", line 1602, in event_generator
+    async for event in agen:
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\runners.py", line 561, in run_async
+    async for event in agen:
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\runners.py", line 549, in _run_with_trace
+    async for event in agen:
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\runners.py", line 778, in _exec_with_plugin
+    async for event in agen:
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\runners.py", line 538, in execute
+    async for event in agen:
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\agents\base_agent.py", line 294, in run_async
+    async for event in agen:
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\agents\llm_agent.py", line 468, in _run_async_impl
+    async for event in agen:
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\flows\llm_flows\base_llm_flow.py", line 427, in run_async
+    async for event in agen:
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\flows\llm_flows\base_llm_flow.py", line 504, in _run_one_step_async
+    async for llm_response in agen:
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\flows\llm_flows\base_llm_flow.py", line 966, in _call_llm_async
+    async for event in agen:
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\flows\llm_flows\base_llm_flow.py", line 949, in _call_llm_with_tracing
+    async for llm_response in agen:
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\flows\llm_flows\base_llm_flow.py", line 1184, in _run_and_handle_error
+    raise model_error
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\flows\llm_flows\base_llm_flow.py", line 1169, in _run_and_handle_error
+    async for llm_response in agen:
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\adk\models\google_llm.py", line 245, in generate_content_async
+    response = await self.api_client.aio.models.generate_content(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\genai\models.py", line 7319, in generate_content
+    return await self._generate_content(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\genai\models.py", line 6095, in _generate_content
+    response = await self._api_client.async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\genai\_api_client.py", line 1442, in async_request
+    result = await self._async_request(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\genai\_api_client.py", line 1375, in _async_request
+    return await self._async_retry(  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\tenacity\asyncio\__init__.py", line 112, in __call__
+    do = await self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\tenacity\asyncio\__init__.py", line 157, in iter
+    result = await action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\tenacity\_utils.py", line 111, in inner
+    return call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\tenacity\__init__.py", line 413, in exc_check
+    raise retry_exc.reraise()
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\tenacity\__init__.py", line 184, in reraise
+    raise self.last_attempt.result()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\tenacity\asyncio\__init__.py", line 116, in __call__
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\genai\_api_client.py", line 1242, in _async_request_once
+    f'Bearer {await self._async_access_token()}'
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\genai\_api_client.py", line 1046, in _async_access_token
+    self._credentials, project = await asyncio.to_thread(
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\asyncio\threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\thread.py", line 59, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\genai\_api_client.py", line 191, in load_auth
+    credentials, loaded_project_id = google.auth.default(  # type: ignore[no-untyped-call]
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-adk-web-migration\adk_web_project\.venv\Lib\site-packages\google\auth\_default.py", line 752, in default
+    raise exceptions.DefaultCredentialsError(_CLOUD_SDK_MISSING_CREDENTIALS)
+google.auth.exceptions.DefaultCredentialsError: Your default credentials were not found. To set up Application Default Credentials, see https://cloud.google.com/docs/authentication/external/set-up-adc for more information.
+INFO:     127.0.0.1:65513 - "GET /debug/trace/session/fc68c49b-6ed5-41d6-afd2-73e29ad8c7a3 HTTP/1.1" 200 OK
