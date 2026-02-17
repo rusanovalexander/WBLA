@@ -305,6 +305,10 @@ def render_chat():
             st.markdown(user_input)
 
         # Process with orchestrator (stream thinking steps live)
+        # Capture refs in main thread — worker thread must not access st.session_state (no ScriptRunContext).
+        orchestrator = st.session_state.orchestrator
+        uploaded_files = st.session_state.uploaded_files
+
         with st.chat_message("assistant"):
             status_placeholder = st.empty()
             thinking_queue = queue.Queue()
@@ -312,9 +316,9 @@ def render_chat():
 
             def run_orchestrator():
                 try:
-                    out = st.session_state.orchestrator.process_message(
+                    out = orchestrator.process_message(
                         message=user_input,
-                        uploaded_files=st.session_state.uploaded_files,
+                        uploaded_files=uploaded_files,
                         on_thinking_step=thinking_queue.put,
                     )
                     shared["result"] = out
