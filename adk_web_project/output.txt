@@ -1,0 +1,49 @@
+
+Agent Development Kit
+left_panel_close
+adk_credit_pack
+Trace
+State
+Artifacts
+Sessions
+Eval
+Invocations
+hi
+ok
+what can you do?
+Session ID
+de742834-db43-458b-bf37-f495c8801327
+User ID
+user
+New Session
+delete
+download
+#1
+hi
+
+#2
+Hello, I am the Credit Pack orchestration agent. I will help you produce credit pack documents. Currently, the tools for deal analysis, requirements discovery, compliance checking, structure generation, and drafting are being connected.
+
+Once the migration is complete, what would you like to do?
+
+#3
+ok
+
+#4
+Understood. I'm ready to assist once the tools are connected. I'll be here.
+
+#5
+what can you do?
+
+#6
+Once the tools are connected, I will be able to:
+
+Analyze the deal: Understand the deal from provided information like a teaser, and determine the appropriate process path and origination method.
+Discover requirements: Identify the dynamic requirements for the credit pack based on procedures and governance policies.
+Check compliance: Assess the deal's compliance against relevant criteria.
+Generate structure: Define the necessary sections for the credit pack document.
+Draft sections: Write each section of the credit pack with the appropriate style and content.
+Essentially, I will automate the process of creating a credit pack document from start to finish.
+
+Type a Message...
+ADK Web Developer UI
