@@ -844,7 +844,12 @@ Produce FULL analysis with assessment approach and origination method.
         if not analysis.success:
             return {"full_analysis": f"[Failed: {analysis.error}]", "procedure_sources": {}}
 
-        return {"full_analysis": analysis.text, "procedure_sources": procedure_results}
+        llm_thinking = getattr(analysis, "thinking", None)
+        return {
+            "full_analysis": analysis.text,
+            "procedure_sources": procedure_results,
+            **({"llm_thinking": llm_thinking} if llm_thinking else {}),
+        }
 
     def _extract_structured_decision(self, analysis_text: str) -> dict[str, Any] | None:
         """Extract decision from analysis text.

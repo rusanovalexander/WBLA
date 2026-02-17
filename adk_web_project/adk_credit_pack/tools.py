@@ -28,39 +28,57 @@ def _state(tool_context: Any) -> dict:
 async def analyze_deal(teaser_text: str, tool_context: Any = None) -> dict[str, Any]:
     """
     Run deal analysis on the given teaser text. Determines process path and origination method.
+    Collects the thinking process (steps + model output) so you can show it to the user.
 
-    Call this when the user provides a teaser or asks to analyze a deal. Store the teaser
-    in state (e.g. from a previous message) or pass it here. Result is stored in state
-    under 'analysis' for use by discover_requirements and later steps.
+    Call this when the user provides a teaser or asks to analyze a deal. Result is stored in state.
 
     Args:
         teaser_text: Full text of the deal teaser document to analyze.
         tool_context: ADK tool context (injected when available); used to read/write state.
 
     Returns:
-        Dict with status, process_path, origination_method, and a short summary.
+        Dict with status, process_path, origination_method, summary, and thinking (for display).
     """
     state = _state(tool_context)
     if not teaser_text or not teaser_text.strip():
         return {"status": "error", "message": "teaser_text is required and must be non-empty."}
+    thinking_parts: list[str] = ["⏳ Starting deal analysis.", "Planning procedure searches.", "Searching procedure documents (RAG).", "Running full analysis (model output below)."]
+    streamed: list[str] = []
     try:
         analyst = get_analyst()
+
+        def collect_stream(chunk: str) -> None:
+            streamed.append(chunk)
+
         result = await asyncio.to_thread(
-            analyst.analyze_deal, teaser_text.strip(), False
+            analyst.analyze_deal, teaser_text.strip(), False, collect_stream
         )
         state["analysis"] = result
         state["teaser_text"] = teaser_text.strip()
         path = result.get("process_path") or "N/A"
         origin = result.get("origination_method") or "N/A"
+        # Prefer model's real thinking (Vertex include_thoughts) when available
+        llm_thinking = result.get("llm_thinking")
+        if llm_thinking and llm_thinking.strip():
+            thinking_parts = [llm_thinking.strip()]
+        else:
+            model_output = "".join(streamed)
+            if len(model_output) > 8000:
+                model_output = model_output[:8000] + "\n\n[... truncated for display ...]"
+            if model_output.strip():
+                thinking_parts.append("--- Model output ---\n" + model_output.strip())
+        thinking_parts.append(f"✓ Extracted decision: process path={path}, origination={origin}.")
+        thinking_text = "\n\n".join(thinking_parts)
         return {
             "status": "success",
             "process_path": path,
             "origination_method": origin,
             "summary": f"Analysis complete. Process path: {path}, Origination: {origin}. Use discover_requirements next.",
+            "thinking": thinking_text,
         }
     except Exception as e:
         logger.exception("analyze_deal failed")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": str(e), "thinking": "\n".join(thinking_parts)}
 
 
 async def discover_requirements(

@@ -96,6 +96,7 @@ class LLMCallResult(BaseModel):
     agent_name: str = "LLM"
     success: bool = True
     error: str | None = None
+    thinking: str | None = None  # Model thought process when include_thoughts=True (Gemini 2.5+)
 
 
 # =============================================================================

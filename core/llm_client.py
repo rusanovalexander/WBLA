@@ -139,10 +139,11 @@ def _call_gemini(
         "max_output_tokens": max_tokens,
     }
 
-    # Add thinking config for gemini-2.5 models
+    # Add thinking config for gemini-2.5 models; include_thoughts=True returns thought summaries in response parts
     if thinking_budget is not None:
         config_kwargs["thinking_config"] = types.ThinkingConfig(
-            thinking_budget=thinking_budget
+            thinking_budget=thinking_budget,
+            include_thoughts=(thinking_budget > 0),
         )
 
     config = types.GenerateContentConfig(**config_kwargs)
@@ -290,16 +291,47 @@ def call_llm(
 
             latency_ms = (time.time() - start_time) * 1000
 
-            # Guard: response.text can fail if no candidates (e.g., safety block, cancelled)
+            # Extract answer and optional thinking from response parts (when include_thoughts=True)
+            thinking_text: str | None = None
             try:
-                result_text = response.text
-            except (ValueError, AttributeError):
-                result_text = "[No text in response — model may have returned empty/blocked output]"
+                if (
+                    thinking_budget and thinking_budget > 0
+                    and response.candidates
+                    and response.candidates[0].content
+                    and getattr(response.candidates[0].content, "parts", None)
+                ):
+                    parts = response.candidates[0].content.parts
+                    thought_parts = []
+                    answer_parts = []
+                    for p in parts:
+                        txt = getattr(p, "text", None) or ""
+                        if not txt:
+                            continue
+                        if getattr(p, "thought", False):
+                            thought_parts.append(txt)
+                        else:
+                            answer_parts.append(txt)
+                    if thought_parts:
+                        thinking_text = "\n\n".join(thought_parts)
+                    if answer_parts:
+                        result_text = "\n".join(answer_parts)
+                    else:
+                        result_text = response.text
+                else:
+                    result_text = response.text
+            except (ValueError, AttributeError, IndexError):
+                result_text = response.text if hasattr(response, "text") else "[No text in response]"
                 logger.warning("Response had no text for %s (candidates may be empty)", agent_name)
+
+            # Guard: response.text can fail if no candidates (e.g., safety block, cancelled)
+            if not result_text:
+                result_text = "[No text in response — model may have returned empty/blocked output]"
 
             # Fix char-per-line fragmentation from multi-part responses
             result_text = _sanitize_response_text(result_text)
             ctx["response_text"] = result_text
+            if thinking_text:
+                ctx["thinking_text"] = thinking_text
 
             # Extract token counts if available
             if hasattr(response, "usage_metadata"):
@@ -332,6 +364,7 @@ def call_llm(
                 tokens_out=ctx["tokens_out"],
                 agent_name=agent_name,
                 success=True,
+                thinking=thinking_text if thinking_budget and thinking_budget > 0 else None,
             )
 
         except Exception as e:
@@ -466,12 +499,12 @@ def _call_gemini_streaming(
     max_tokens: int,
     on_chunk: Callable[[str], None] | None = None,
     thinking_budget: int | None = None,
-) -> str:
+) -> tuple[str, str | None]:
     """
     Raw Gemini streaming API call with retry.
 
-    Returns the concatenated response text. Retryable exceptions
-    (429, 503, timeout, etc.) are retried by tenacity.
+    Returns (concatenated response text, thinking_text or None).
+    Retryable exceptions (429, 503, timeout, etc.) are retried by tenacity.
     """
     from google.genai import types
 
@@ -484,23 +517,43 @@ def _call_gemini_streaming(
 
     if thinking_budget is not None:
         config_kwargs["thinking_config"] = types.ThinkingConfig(
-            thinking_budget=thinking_budget
+            thinking_budget=thinking_budget,
+            include_thoughts=(thinking_budget > 0),
         )
 
     config = types.GenerateContentConfig(**config_kwargs)
 
     chunks: list[str] = []
+    thought_chunks: list[str] = []
     for chunk in client.models.generate_content_stream(
         model=model,
         contents=prompt,
         config=config,
     ):
+        # When include_thoughts=True, stream may yield parts with part.thought
+        if getattr(chunk, "candidates", None) and chunk.candidates:
+            c0 = chunk.candidates[0]
+            if getattr(c0, "content", None) and getattr(c0.content, "parts", None):
+                for p in c0.content.parts:
+                    txt = getattr(p, "text", None) or ""
+                    if not txt:
+                        continue
+                    if getattr(p, "thought", False):
+                        thought_chunks.append(txt)
+                        if on_chunk:
+                            on_chunk("[Thinking] " + txt)
+                        continue
+                    chunks.append(txt)
+                    if on_chunk:
+                        on_chunk(txt)
+                continue
         if chunk.text:
             chunks.append(chunk.text)
             if on_chunk:
                 on_chunk(chunk.text)
 
-    return "".join(chunks)
+    thinking_text = "\n\n".join(thought_chunks) if thought_chunks else None
+    return "".join(chunks), thinking_text
 
 
 def call_llm_streaming(
@@ -537,7 +590,7 @@ def call_llm_streaming(
 
     with tracer.trace_llm_call(agent_name, model, prompt) as ctx:
         try:
-            result_text = _call_gemini_streaming(
+            result_text, thinking_text = _call_gemini_streaming(
                 prompt=prompt,
                 model=model,
                 temperature=temperature,
@@ -557,6 +610,7 @@ def call_llm_streaming(
                 tokens_out=ctx["tokens_out"],
                 agent_name=agent_name,
                 success=True,
+                thinking=thinking_text if thinking_budget and thinking_budget > 0 else None,
             )
 
         except Exception as e:
