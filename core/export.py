@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from config.settings import BASE_DIR, VERSION
+from config.settings import OUTPUTS_FOLDER, VERSION
 from core.tracing import TraceStore, get_tracer
 
 logger = logging.getLogger(__name__)
@@ -137,9 +137,9 @@ def generate_docx(
         footer_run.font.size = Pt(8)
         footer_run.font.color.rgb = RGBColor(0xA0, 0xA0, 0xA0)
 
-        # ---- Save ----
-        output_dir = BASE_DIR / "outputs"
-        output_dir.mkdir(exist_ok=True)
+        # ---- Save to outputs folder (same as config.settings.OUTPUTS_FOLDER) ----
+        output_dir = Path(OUTPUTS_FOLDER)
+        output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / filename
         doc.save(str(output_path))
 
@@ -428,9 +428,9 @@ def generate_audit_trail(
                 lines.append(f"  {h.get('timestamp', '')} | {h['from']} → {h['to']} ({nav})")
             lines.append("")
 
-    # Save
-    output_dir = BASE_DIR / "outputs"
-    output_dir.mkdir(exist_ok=True)
+    # Save to outputs folder
+    output_dir = Path(OUTPUTS_FOLDER)
+    output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / filename
 
     with open(output_path, "w", encoding="utf-8") as f:

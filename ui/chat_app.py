@@ -10,6 +10,7 @@ Claude Code-style interface with:
 
 import streamlit as st
 from pathlib import Path
+from datetime import datetime
 import sys
 import threading
 import queue
@@ -19,7 +20,7 @@ import time
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Setup Google Cloud environment (MUST be called before importing orchestrator)
-from config.settings import setup_environment, VERSION
+from config.settings import setup_environment, VERSION, PRODUCT_NAME
 setup_environment()
 
 # Import v2 orchestrator with modern features
@@ -190,6 +191,72 @@ def render_sidebar():
                 st.rerun()
         else:
             st.info("No agent communications yet")
+
+        st.divider()
+
+        # Export drafted credit pack to DOCX (saved to outputs folder)
+        st.header("📥 Export")
+        if hasattr(st.session_state.orchestrator, "persistent_context"):
+            ctx = st.session_state.orchestrator.persistent_context
+            structure = ctx.get("structure") or []
+            drafts = ctx.get("drafts") or {}
+            if structure and drafts:
+                num_drafted = sum(1 for s in structure if drafts.get(s.get("name")))
+                st.caption(f"{num_drafted}/{len(structure)} sections drafted")
+                if st.session_state.get("_chat_docx_path"):
+                    docx_path = st.session_state["_chat_docx_path"]
+                    st.success(f"Saved: {Path(docx_path).name}")
+                    try:
+                        with open(docx_path, "rb") as f:
+                            st.download_button(
+                                "⬇️ Download DOCX",
+                                f,
+                                Path(docx_path).name,
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                use_container_width=True,
+                            )
+                    except Exception:
+                        pass
+                    if st.button("🔄 Regenerate DOCX", key="regen_docx"):
+                        st.session_state["_chat_docx_path"] = None
+                        st.rerun()
+                else:
+                    if st.button("📥 Save DOCX to outputs folder", type="primary", use_container_width=True):
+                        from core.export import generate_docx
+                        # Assemble final document from structure order (same as legacy complete phase)
+                        parts = []
+                        for sec in structure:
+                            name = sec.get("name", "")
+                            d = drafts.get(name)
+                            if d is None:
+                                continue
+                            content = getattr(d, "content", d) if not isinstance(d, str) else d
+                            if content:
+                                parts.append(f"# {name}\n\n{content}")
+                        final_document = "\n\n---\n\n".join(parts) if parts else ""
+                        if not final_document:
+                            st.error("No draft content to export")
+                        else:
+                            metadata = {}
+                            if ctx.get("teaser_filename"):
+                                metadata["deal_name"] = ctx["teaser_filename"]
+                            analysis = ctx.get("analysis") or {}
+                            if analysis.get("process_path"):
+                                metadata["process_path"] = analysis["process_path"]
+                            if analysis.get("origination_method"):
+                                metadata["origination_method"] = analysis["origination_method"]
+                            filename = f"{PRODUCT_NAME.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.docx"
+                            path = generate_docx(final_document, filename, metadata)
+                            if path:
+                                st.session_state["_chat_docx_path"] = path
+                                st.success(f"Saved to: {path}")
+                                st.rerun()
+                            else:
+                                st.error("DOCX generation failed — check python-docx installation")
+            else:
+                st.info("Draft sections first, then export here")
+        else:
+            st.info("Draft sections first, then export here")
 
 
 def render_thinking_process(thinking_steps: list[str], status_label: str = "Processing..."):
