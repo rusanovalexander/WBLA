@@ -1,15 +1,19 @@
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
-_safe_struct_to_dict: Method 1 (MessageToDict) FAILED: 'google._upb._message.MessageMapContainer' object has no attribute 'DESCRIPTOR'
+Multi-agent conversational system for credit pack drafting
+
+start analysis
+
+❌ Error: st.session_state has no attribute "orchestrator". Did you forget to initialize it? More info: https://docs.streamlit.io/develop/concepts/architecture/session-state#initialization
+
+❌ Error
+
+❌ st.session_state has no attribute "orchestrator". Did you forget to initialize it? More info: https://docs.streamlit.io/develop/concepts/architecture/session-state#initialization
+
+C:\Users\GV20FI\Documents\Mode Development\AI in WB lending process\Project Omni\WBLA-feature-autonomous-agents_v21>python -m streamlit run ui/chat_app.py
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://172.16.93.97:8501
+  External URL: http://144.178.220.33:8501
+
+2026-02-17 09:53:07.008 Thread 'Thread-15 (run_orchestrator)': missing ScriptRunContext! This warning can be ignored when running in bare mode.
