@@ -1,23 +1,49 @@
-Credit Pack Eval — sample results
-================================
+Credit Pack Eval — 2026-02-18T13:26:51.560051
+Cases run: 12
 
-Run the full eval (requires .env and Vertex/LLM) from credit-pack directory:
+## case_01_analyze_short_teaser — Analyze short teaser
+  [OK]   after_analyze_deal: has ['status', 'process_path', 'origination_method', 'thinking', 'summary']
 
-  uv sync
-  uv run python eval/run_eval.py
+## case_02_analyze_then_requirements — Full flow: analyze then discover requirements
+  [OK]   after_analyze_deal: has ['status', 'process_path', 'origination_method']
+  [OK]   after_discover_requirements: has ['status', 'total', 'filled', 'summary']
 
-List cases:
-  uv run python eval/run_eval.py --list
+## case_03_analyze_requirements_compliance — Analyze, requirements, compliance
+  [OK]   after_analyze_deal: has ['status']
+  [OK]   after_discover_requirements: has ['status', 'total']
+  [OK]   after_check_compliance: has ['status', 'checks_count', 'summary']
 
-Single case:
-  uv run python eval/run_eval.py --case case_01_analyze_short_teaser
+## case_04_structure_and_draft — Structure and one section draft
+  [OK]   after_generate_structure: has ['status', 'sections', 'summary']
+  [OK]   after_draft_section: has ['status', 'section', 'preview', 'summary']
 
-Sample outputs (error-handling cases) are in result_case_05_*.json and result_case_06_*.json.
-After running the full eval, result_*.json and this summary will be overwritten with actual run results.
+## case_05_error_no_teaser — Error handling: analyze without teaser
+  [OK]   after_analyze_deal: has ['status', 'message']
 
-Quality checklist when reviewing:
-- case_01: process_path and origination_method non-empty and plausible
-- case_02: requirements total > 0
-- case_03: compliance checks_count > 0
-- case_04: structure sections and draft preview non-empty
-- case_05, 06: status=error with clear message
+## case_06_error_requirements_before_analysis — Error handling: requirements before analysis
+  [OK]   after_discover_requirements: has ['status', 'message']
+
+## case_07_full_flow_with_example — Full flow with set_example (structure uses example style)
+  [OK]   after_set_example: has ['status']
+  [OK]   after_analyze_deal: has ['status', 'process_path', 'origination_method']
+  [OK]   after_discover_requirements: has ['status', 'total']
+  [OK]   after_check_compliance: has ['status', 'checks_count']
+  [OK]   after_generate_structure: has ['status', 'sections']
+  [OK]   after_draft_section: has ['status', 'section', 'preview']
+
+## case_08_full_process_with_export — Full process through export to DOCX
+  [OK]   after_generate_structure: has ['status', 'sections']
+  [OK]   after_draft_section: has ['status', 'section', 'preview']
+  [OK]   after_export_credit_pack: has ['status', 'path', 'message']
+
+## case_09_error_compliance_without_requirements — Error handling: check_compliance without requirements
+  [OK]   after_check_compliance: has ['status', 'message']
+
+## case_10_error_structure_without_analysis — Error handling: generate_structure without analysis
+  [OK]   after_generate_structure: has ['status', 'message']
+
+## case_11_error_draft_without_structure — Error handling: draft_section without structure
+  [OK]   after_draft_section: has ['status', 'message']
+
+## case_12_error_export_without_drafts — Error handling: export_credit_pack without drafts
+  [OK]   after_export_credit_pack: has ['status', 'message']
