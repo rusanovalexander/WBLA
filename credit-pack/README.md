@@ -16,15 +16,11 @@ Credit Pack orchestration agent following the [Google ADK Samples](https://githu
 ## Setup
 
 1. Copy `.env.example` to `.env` and set `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`.
-2. From repo root (to use parent `agents`, `core`, `config`):
+2. Run from **repo root** (runner and tools use `agents`, `core`, `config` from the repo):
    ```bash
    PYTHONPATH=. uv run --project credit-pack adk web --port 8000
    ```
-3. Or from `credit-pack/` after path dependency is configured:
-   ```bash
-   uv sync
-   uv run adk web
-   ```
+3. Open http://127.0.0.1:8000 and select the `credit_pack` agent.
 
 ## Migration plan
 
