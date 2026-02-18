@@ -1,27 +1,36 @@
-# Credit Pack Agent (ADK Samples Style)
+# Credit Pack (clean ADK project)
 
-Credit Pack orchestration agent following the [Google ADK Samples](https://github.com/google/adk-samples/tree/main/python/agents) structure. Handles deal analysis, requirements discovery, compliance, structure generation, and section drafting.
+Single, self-contained Credit Pack agent following the [Google ADK Samples](https://github.com/google/adk-samples/tree/main/python/agents) layout. No dependency on the rest of the repo.
 
-## Structure
+## Layout
 
-- `credit_pack/` — core package
-  - `agent.py` — root agent
+- `credit_pack/` — package
+  - `agent.py` — root ADK agent
   - `prompt.py` — instructions
-  - `tools.py` — root-level tools (including AgentTools for sub-agents)
-  - `sub_agents/` — process_analyst, compliance, writer
-- `deployment/` — Vertex AI Agent Engine deploy
-- `eval/` — evaluation scripts and data
-- `tests/` — unit tests
+  - `tools.py` — ADK tools (set_teaser, analyze_deal, discover_requirements, check_compliance, generate_structure, draft_section, export_credit_pack)
+  - `llm.py` — Vertex AI (google-genai) client
+  - `config.py` — env-based config
+  - `governance.py`, `rag.py` — minimal (stubs; plug in your RAG/governance)
+  - `analyst.py`, `compliance.py`, `writer.py` — analysis, compliance, structure/draft
+  - `export_docx.py` — DOCX export (python-docx)
+- `deployment/`, `eval/`, `tests/` — for deploy, eval, tests
+- `pyproject.toml`, `.env.example`
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and set `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`.
-2. Run from **repo root** (runner and tools use `agents`, `core`, `config` from the repo):
+1. From the **credit-pack** directory:
    ```bash
-   PYTHONPATH=. uv run --project credit-pack adk web --port 8000
+   cd credit-pack
+   uv sync
    ```
-3. Open http://127.0.0.1:8000 and select the `credit_pack` agent.
+2. Copy `.env.example` to `.env` and set:
+   - `GOOGLE_CLOUD_PROJECT`
+   - `GOOGLE_CLOUD_LOCATION` (e.g. us-central1)
+   - Optionally `GOOGLE_APPLICATION_CREDENTIALS` for a service account key
+3. Run:
+   ```bash
+   uv run adk web --port 8000
+   ```
+4. Open http://127.0.0.1:8000 and select the `credit_pack` agent.
 
-## Migration plan
-
-See `docs/ADK_SAMPLES_FULL_MIGRATION_PLAN.md` for the full transition plan and phases.
+No `PYTHONPATH` or repo root required; the project is self-contained.
