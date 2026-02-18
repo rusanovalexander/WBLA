@@ -10,7 +10,8 @@ Single, self-contained Credit Pack agent following the [Google ADK Samples](http
   - `tools.py` — ADK tools (set_teaser, analyze_deal, discover_requirements, check_compliance, generate_structure, draft_section, export_credit_pack)
   - `llm.py` — Vertex AI (google-genai) client
   - `config.py` — env-based config
-  - `governance.py`, `rag.py` — minimal (stubs; plug in your RAG/governance)
+  - `governance.py` — RAG-query Procedure & Guidelines, LLM extraction, cached context
+  - `rag.py` — Vertex AI Search (Discovery Engine): procedure and guidelines search
   - `analyst.py`, `compliance.py`, `writer.py` — analysis, compliance, structure/draft
   - `export_docx.py` — DOCX export (python-docx)
 - `deployment/`, `eval/`, `tests/` — for deploy, eval, tests
@@ -26,6 +27,8 @@ Single, self-contained Credit Pack agent following the [Google ADK Samples](http
 2. Copy `.env.example` to `.env` and set:
    - `GOOGLE_CLOUD_PROJECT`
    - `GOOGLE_CLOUD_LOCATION` (e.g. us-central1)
+   - `DATA_STORE_ID` — Vertex AI Search data store for procedure/guidelines RAG
+   - `SEARCH_LOCATION` (e.g. global) if not using default
    - Optionally `GOOGLE_APPLICATION_CREDENTIALS` for a service account key
 3. Run:
    ```bash
