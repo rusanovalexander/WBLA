@@ -31,17 +31,21 @@ async def analyze_deal(teaser_text: str, tool_context: Any = None) -> dict[str, 
     Collects the thinking process (steps + model output) so you can show it to the user.
 
     Call this when the user provides a teaser or asks to analyze a deal. Result is stored in state.
+    If teaser_text is empty, uses the teaser stored by set_teaser (avoids re-passing long text).
 
     Args:
-        teaser_text: Full text of the deal teaser document to analyze.
+        teaser_text: Full text of the deal teaser document to analyze. Pass empty string to use the teaser already stored by set_teaser.
         tool_context: ADK tool context (injected when available); used to read/write state.
 
     Returns:
         Dict with status, process_path, origination_method, summary, and thinking (for display).
     """
     state = _state(tool_context)
-    if not teaser_text or not teaser_text.strip():
-        return {"status": "error", "message": "teaser_text is required and must be non-empty."}
+    text = (teaser_text or "").strip()
+    if not text:
+        text = (state.get("teaser_text") or "").strip()
+    if not text:
+        return {"status": "error", "message": "teaser_text is required. Call set_teaser first or pass the teaser text."}
     thinking_parts: list[str] = ["⏳ Starting deal analysis.", "Planning procedure searches.", "Searching procedure documents (RAG).", "Running full analysis (model output below)."]
     streamed: list[str] = []
     try:
@@ -51,10 +55,10 @@ async def analyze_deal(teaser_text: str, tool_context: Any = None) -> dict[str, 
             streamed.append(chunk)
 
         result = await asyncio.to_thread(
-            analyst.analyze_deal, teaser_text.strip(), False, collect_stream
+            analyst.analyze_deal, text, False, collect_stream
         )
         state["analysis"] = result
-        state["teaser_text"] = teaser_text.strip()
+        state["teaser_text"] = text
         path = result.get("process_path") or "N/A"
         origin = result.get("origination_method") or "N/A"
         # Prefer model's real thinking (Vertex include_thoughts) when available
