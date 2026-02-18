@@ -293,6 +293,7 @@ def call_llm(
 
             # Extract answer and optional thinking from response parts (when include_thoughts=True)
             thinking_text: str | None = None
+            result_text = ""
             try:
                 if (
                     thinking_budget and thinking_budget > 0
@@ -316,14 +317,14 @@ def call_llm(
                     if answer_parts:
                         result_text = "\n".join(answer_parts)
                     else:
-                        result_text = response.text
+                        result_text = getattr(response, "text", None) or ""
                 else:
-                    result_text = response.text
+                    result_text = getattr(response, "text", None) or ""
             except (ValueError, AttributeError, IndexError):
-                result_text = response.text if hasattr(response, "text") else "[No text in response]"
+                result_text = getattr(response, "text", None) or "[No text in response]"
                 logger.warning("Response had no text for %s (candidates may be empty)", agent_name)
 
-            # Guard: response.text can fail if no candidates (e.g., safety block, cancelled)
+            # Guard: ensure we never pass None to LLMCallResult.text
             if not result_text:
                 result_text = "[No text in response — model may have returned empty/blocked output]"
 

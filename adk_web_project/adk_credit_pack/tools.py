@@ -25,27 +25,29 @@ def _state(tool_context: Any) -> dict:
     return _fallback_state
 
 
-async def analyze_deal(teaser_text: str, tool_context: Any = None) -> dict[str, Any]:
+async def analyze_deal(teaser_text: str = "", tool_context: Any = None) -> dict[str, Any]:
     """
-    Run deal analysis on the given teaser text. Determines process path and origination method.
+    Run deal analysis on teaser text and determine process path and origination method.
     Collects the thinking process (steps + model output) so you can show it to the user.
 
     Call this when the user provides a teaser or asks to analyze a deal. Result is stored in state.
-    If teaser_text is empty, uses the teaser stored by set_teaser (avoids re-passing long text).
 
     Args:
-        teaser_text: Full text of the deal teaser document to analyze. Pass empty string to use the teaser already stored by set_teaser.
+        teaser_text: Optional full teaser text. If empty, use teaser previously stored in state.
         tool_context: ADK tool context (injected when available); used to read/write state.
 
     Returns:
         Dict with status, process_path, origination_method, summary, and thinking (for display).
     """
     state = _state(tool_context)
-    text = (teaser_text or "").strip()
-    if not text:
-        text = (state.get("teaser_text") or "").strip()
-    if not text:
-        return {"status": "error", "message": "teaser_text is required. Call set_teaser first or pass the teaser text."}
+    provided_teaser = (teaser_text or "").strip()
+    stored_teaser = (state.get("teaser_text") or "").strip()
+    effective_teaser = provided_teaser or stored_teaser
+    if not effective_teaser:
+        return {
+            "status": "error",
+            "message": "No teaser available. Provide teaser_text or call set_teaser first.",
+        }
     thinking_parts: list[str] = ["⏳ Starting deal analysis.", "Planning procedure searches.", "Searching procedure documents (RAG).", "Running full analysis (model output below)."]
     streamed: list[str] = []
     try:
@@ -54,11 +56,9 @@ async def analyze_deal(teaser_text: str, tool_context: Any = None) -> dict[str, 
         def collect_stream(chunk: str) -> None:
             streamed.append(chunk)
 
-        result = await asyncio.to_thread(
-            analyst.analyze_deal, text, False, collect_stream
-        )
+        result = await asyncio.to_thread(analyst.analyze_deal, effective_teaser, False, collect_stream)
         state["analysis"] = result
-        state["teaser_text"] = text
+        state["teaser_text"] = effective_teaser
         path = result.get("process_path") or "N/A"
         origin = result.get("origination_method") or "N/A"
         # Prefer model's real thinking (Vertex include_thoughts) when available

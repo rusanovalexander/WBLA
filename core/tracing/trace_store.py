@@ -161,14 +161,14 @@ class TraceStore:
             yield ctx
         finally:
             duration_ms = int((time.time() - start) * 1000)
-            tokens_out = ctx.get("tokens_out", 0) or estimate_tokens(ctx.get("response_text", ""))
+            tokens_out = ctx.get("tokens_out", 0) or estimate_tokens((ctx.get("response_text") or ""))
             tokens_in = ctx.get("tokens_in", 0)
             cost = estimate_cost(model, tokens_in, tokens_out)
 
             self.record(
                 agent,
                 "LLM_RESPONSE",
-                f"Generated {len(ctx.get('response_text', '')):,} chars in {duration_ms}ms",
+                f"Generated {len((ctx.get('response_text') or '')):,} chars in {duration_ms}ms",
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
                 cost_usd=cost,
