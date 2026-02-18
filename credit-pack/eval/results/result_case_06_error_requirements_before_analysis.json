@@ -1,0 +1,11 @@
+{
+  "case_id": "case_06_error_requirements_before_analysis",
+  "name": "Error handling: requirements before analysis",
+  "steps_done": ["discover_requirements"],
+  "outputs": {
+    "discover_requirements": {
+      "status": "error",
+      "message": "Run analyze_deal first or pass analysis_text."
+    }
+  }
+}

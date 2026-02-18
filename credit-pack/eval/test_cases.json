@@ -1,0 +1,148 @@
+{
+  "description": "Credit Pack agent evaluation cases. Run with: uv run python eval/run_eval.py",
+  "cases": [
+    {
+      "id": "case_01_analyze_short_teaser",
+      "name": "Analyze short teaser",
+      "steps": ["set_teaser", "analyze_deal"],
+      "inputs": {
+        "teaser_text": "Van der Meer Properties DPF. Dutch Property Fund. Debt investor presentation June 2025. Amendment and extension of Institutional Credit Facility August 2024. Prime-grade office portfolio, Amsterdam CBD. Capital management strategy."
+      },
+      "checks": {
+        "after_analyze_deal": ["status", "process_path", "origination_method", "thinking", "summary"]
+      }
+    },
+    {
+      "id": "case_02_analyze_then_requirements",
+      "name": "Full flow: analyze then discover requirements",
+      "steps": ["set_teaser", "analyze_deal", "discover_requirements"],
+      "inputs": {
+        "teaser_text": "Infrastructure Co. Senior secured facility. Syndicated loan. Refinancing of existing debt. Project finance. 15-year tenor. Covenant package standard for the sector."
+      },
+      "checks": {
+        "after_analyze_deal": ["status", "process_path", "origination_method"],
+        "after_discover_requirements": ["status", "total", "filled", "summary"]
+      }
+    },
+    {
+      "id": "case_03_analyze_requirements_compliance",
+      "name": "Analyze, requirements, compliance",
+      "steps": ["set_teaser", "analyze_deal", "discover_requirements", "check_compliance"],
+      "inputs": {
+        "teaser_text": "Bilateral corporate loan. Investment grade borrower. Revolving credit facility. Standard terms. No security. Financial covenants: leverage, interest cover."
+      },
+      "checks": {
+        "after_analyze_deal": ["status"],
+        "after_discover_requirements": ["status", "total"],
+        "after_check_compliance": ["status", "checks_count", "summary"]
+      }
+    },
+    {
+      "id": "case_04_structure_and_draft",
+      "name": "Structure and one section draft",
+      "steps": ["set_teaser", "analyze_deal", "discover_requirements", "check_compliance", "generate_structure", "draft_section"],
+      "inputs": {
+        "teaser_text": "Real estate financing. CRE. Amendment and extend. Institutional facility. Amsterdam office. DPF.",
+        "draft_section_name": "Executive Summary"
+      },
+      "checks": {
+        "after_generate_structure": ["status", "sections", "summary"],
+        "after_draft_section": ["status", "section", "preview", "summary"]
+      }
+    },
+    {
+      "id": "case_05_error_no_teaser",
+      "name": "Error handling: analyze without teaser",
+      "steps": ["analyze_deal"],
+      "inputs": {},
+      "expect_error_step": "analyze_deal",
+      "checks": {
+        "after_analyze_deal": ["status", "message"]
+      }
+    },
+    {
+      "id": "case_06_error_requirements_before_analysis",
+      "name": "Error handling: requirements before analysis",
+      "steps": ["discover_requirements"],
+      "inputs": {},
+      "expect_error_step": "discover_requirements",
+      "checks": {
+        "after_discover_requirements": ["status", "message"]
+      }
+    },
+    {
+      "id": "case_07_full_flow_with_example",
+      "name": "Full flow with set_example (structure uses example style)",
+      "steps": ["set_teaser", "set_example", "analyze_deal", "discover_requirements", "check_compliance", "generate_structure", "draft_section"],
+      "inputs": {
+        "teaser_text": "Corporate RCF. Investment grade. Bilateral. Standard covenants.",
+        "example_text": "This is an example credit memo. Executive Summary. Transaction Overview. Key Terms. Appendix."
+      },
+      "checks": {
+        "after_set_example": ["status"],
+        "after_analyze_deal": ["status", "process_path", "origination_method"],
+        "after_discover_requirements": ["status", "total"],
+        "after_check_compliance": ["status", "checks_count"],
+        "after_generate_structure": ["status", "sections"],
+        "after_draft_section": ["status", "section", "preview"]
+      }
+    },
+    {
+      "id": "case_08_full_process_with_export",
+      "name": "Full process through export to DOCX",
+      "steps": ["set_teaser", "analyze_deal", "discover_requirements", "check_compliance", "generate_structure", "draft_section", "export_credit_pack"],
+      "inputs": {
+        "teaser_text": "CRE facility. Amendment and extend. Prime office. Amsterdam.",
+        "draft_section_name": "Executive Summary",
+        "export_filename": "eval_export_sample.docx"
+      },
+      "checks": {
+        "after_generate_structure": ["status", "sections"],
+        "after_draft_section": ["status", "section", "preview"],
+        "after_export_credit_pack": ["status", "path", "message"]
+      }
+    },
+    {
+      "id": "case_09_error_compliance_without_requirements",
+      "name": "Error handling: check_compliance without requirements",
+      "steps": ["check_compliance"],
+      "inputs": {},
+      "expect_error_step": "check_compliance",
+      "checks": {
+        "after_check_compliance": ["status", "message"]
+      }
+    },
+    {
+      "id": "case_10_error_structure_without_analysis",
+      "name": "Error handling: generate_structure without analysis",
+      "steps": ["generate_structure"],
+      "inputs": {},
+      "expect_error_step": "generate_structure",
+      "checks": {
+        "after_generate_structure": ["status", "message"]
+      }
+    },
+    {
+      "id": "case_11_error_draft_without_structure",
+      "name": "Error handling: draft_section without structure",
+      "steps": ["draft_section"],
+      "inputs": {
+        "draft_section_name": "Executive Summary"
+      },
+      "expect_error_step": "draft_section",
+      "checks": {
+        "after_draft_section": ["status", "message"]
+      }
+    },
+    {
+      "id": "case_12_error_export_without_drafts",
+      "name": "Error handling: export_credit_pack without drafts",
+      "steps": ["export_credit_pack"],
+      "inputs": {},
+      "expect_error_step": "export_credit_pack",
+      "checks": {
+        "after_export_credit_pack": ["status", "message"]
+      }
+    }
+  ]
+}

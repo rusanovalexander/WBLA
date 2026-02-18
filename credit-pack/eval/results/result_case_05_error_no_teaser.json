@@ -1,0 +1,11 @@
+{
+  "case_id": "case_05_error_no_teaser",
+  "name": "Error handling: analyze without teaser",
+  "steps_done": ["analyze_deal"],
+  "outputs": {
+    "analyze_deal": {
+      "status": "error",
+      "message": "No teaser available. Provide teaser_text or call set_teaser first."
+    }
+  }
+}

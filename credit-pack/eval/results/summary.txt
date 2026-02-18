@@ -1,0 +1,23 @@
+Credit Pack Eval — sample results
+================================
+
+Run the full eval (requires .env and Vertex/LLM) from credit-pack directory:
+
+  uv sync
+  uv run python eval/run_eval.py
+
+List cases:
+  uv run python eval/run_eval.py --list
+
+Single case:
+  uv run python eval/run_eval.py --case case_01_analyze_short_teaser
+
+Sample outputs (error-handling cases) are in result_case_05_*.json and result_case_06_*.json.
+After running the full eval, result_*.json and this summary will be overwritten with actual run results.
+
+Quality checklist when reviewing:
+- case_01: process_path and origination_method non-empty and plausible
+- case_02: requirements total > 0
+- case_03: compliance checks_count > 0
+- case_04: structure sections and draft preview non-empty
+- case_05, 06: status=error with clear message
