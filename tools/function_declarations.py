@@ -120,6 +120,65 @@ def get_tool_declarations(governance_context: dict[str, Any] | None = None) -> d
                 ),
             ]
         ),
+        "submit_analysis_result": types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="submit_analysis_result",
+                    description=(
+                        "Submit the final structured analysis result. "
+                        "Call this LAST, after completing all Procedure searches. "
+                        "This is the REQUIRED way to record your decision — do NOT write "
+                        "a RESULT_JSON text block; use this tool instead."
+                    ),
+                    parameters=types.Schema(
+                        type="OBJECT",
+                        properties={
+                            "assessment_approach": types.Schema(
+                                type="STRING",
+                                description="Exact assessment approach term from the Procedure document.",
+                            ),
+                            "origination_method": types.Schema(
+                                type="STRING",
+                                description="Exact origination method term from the Procedure document.",
+                            ),
+                            "assessment_reasoning": types.Schema(
+                                type="STRING",
+                                description=(
+                                    "1-2 sentence explanation of why this assessment approach "
+                                    "was chosen, citing Procedure sections."
+                                ),
+                            ),
+                            "origination_reasoning": types.Schema(
+                                type="STRING",
+                                description=(
+                                    "1-2 sentence explanation of why this origination method "
+                                    "was chosen, citing Procedure sections."
+                                ),
+                            ),
+                            "procedure_sections_cited": types.Schema(
+                                type="ARRAY",
+                                items=types.Schema(type="STRING"),
+                                description=(
+                                    "List of Procedure section references used "
+                                    "(e.g. ['Section 3.1', 'Section 4.2'])."
+                                ),
+                            ),
+                            "confidence": types.Schema(
+                                type="STRING",
+                                description="Confidence level: HIGH, MEDIUM, or LOW.",
+                            ),
+                        },
+                        required=[
+                            "assessment_approach",
+                            "origination_method",
+                            "assessment_reasoning",
+                            "origination_reasoning",
+                            "confidence",
+                        ],
+                    ),
+                ),
+            ]
+        ),
     }
 
 
@@ -186,7 +245,7 @@ def get_agent_tools(agent_name: str, governance_context: dict[str, Any] | None =
         return []
 
     agent_tool_map = {
-        "ProcessAnalyst": ["search_procedure"],
+        "ProcessAnalyst": ["search_procedure", "submit_analysis_result"],
         "ComplianceAdvisor": ["search_guidelines", "search_procedure"],
         "Orchestrator": ["search_procedure", "search_guidelines", "search_rag"],
         "Writer": [],  # Writer uses agent queries, not direct RAG

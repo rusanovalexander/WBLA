@@ -806,18 +806,42 @@ class ProcessAnalyst:
         return ui_requirements
 
     def _run_analysis_native(self, teaser_text: str) -> dict[str, Any]:
-        """Native function calling."""
+        """Native function calling with a terminal submit_analysis_result tool.
+
+        Instead of asking the model to write an inline <RESULT_JSON> text block
+        (unreliable after multi-turn tool loops), the model calls the
+        `submit_analysis_result` function.  The executor captures the structured
+        args and injects them as a <RESULT_JSON> block so the existing
+        _extract_structured_decision() parser can read it unchanged.
+        """
+        import json as _json
         from tools.function_declarations import get_agent_tools, create_tool_executor
 
         tools = get_agent_tools("ProcessAnalyst", governance_context=self.governance_context)
         if not tools:
             raise RuntimeError("No native tools")
 
-        executor = create_tool_executor(
+        # Capture the structured result when the model calls submit_analysis_result
+        captured_result: dict[str, Any] = {}
+
+        base_executor = create_tool_executor(
             search_procedure_fn=self.search_procedure_fn,
             search_guidelines_fn=lambda q, n=3: {"status": "ERROR", "results": []},
             search_rag_fn=lambda q, n=3: {"status": "ERROR", "results": []},
         )
+
+        def capturing_executor(tool_name: str, tool_args: dict) -> Any:
+            if tool_name == "submit_analysis_result":
+                captured_result.update(tool_args)
+                self.tracer.record(
+                    "ProcessAnalyst", "RESULT_CAPTURED",
+                    f"submit_analysis_result called: "
+                    f"approach={tool_args.get('assessment_approach')!r}, "
+                    f"method={tool_args.get('origination_method')!r}, "
+                    f"confidence={tool_args.get('confidence')!r}",
+                )
+                return {"status": "ok", "message": "Analysis result recorded successfully."}
+            return base_executor(tool_name, tool_args)
 
         prompt = f"""{self.instruction}
 
@@ -825,39 +849,42 @@ class ProcessAnalyst:
 {teaser_text}
 
 ## TASK
-Analyze and determine assessment approach and origination method.
-Search Procedure document AT LEAST 3 TIMES before recommending.
-
-CRITICAL: After completing your analysis you MUST output your structured decision
-in a <RESULT_JSON> block exactly as specified in your instructions above.
-Without this block the process path cannot be recorded.
+1. Search the Procedure document AT LEAST 3 TIMES using `search_procedure` to determine
+   the correct assessment approach and origination method for this deal.
+2. After completing your research, call `submit_analysis_result` with the structured
+   decision data. This is MANDATORY — it replaces the <RESULT_JSON> text block.
+   Do NOT write a <RESULT_JSON> text block; use the `submit_analysis_result` tool instead.
 """
 
         result = call_llm_with_tools(
             prompt=prompt,
             tools=tools,
-            tool_executor=executor,
+            tool_executor=capturing_executor,
             model=AGENT_MODELS.get("process_analyst", MODEL_FLASH),
             temperature=0.0,
             max_tokens=16000,
             agent_name="ProcessAnalyst",
-            max_tool_rounds=5,
+            max_tool_rounds=8,  # 3-5 searches + 1 submit_analysis_result + slack
             tracer=self.tracer,
             thinking_budget=THINKING_BUDGET_LIGHT,
         )
 
-        raw = {"full_analysis": result.text, "procedure_sources": {}}
-
-        # Validate that RESULT_JSON was produced — if not, raise so analyze_deal
-        # falls back to the text-based path which reliably produces the block.
-        import re as _re
-        if not _re.search(r'<RESULT_JSON>', result.text, _re.IGNORECASE):
+        if not captured_result:
             raise RuntimeError(
-                "Native tools analysis did not produce a <RESULT_JSON> block — "
+                "Native tools analysis did not call submit_analysis_result — "
                 "falling back to text-based analysis"
             )
 
-        return raw
+        # Inject the captured args as a <RESULT_JSON> block so the existing
+        # _extract_structured_decision() parser works without modification.
+        result_json_block = (
+            "\n\n<RESULT_JSON>\n"
+            + _json.dumps(captured_result, indent=2, ensure_ascii=False)
+            + "\n</RESULT_JSON>"
+        )
+        full_analysis = (result.text or "") + result_json_block
+
+        return {"full_analysis": full_analysis, "procedure_sources": {}}
 
     def _run_analysis_text_based(
         self,
