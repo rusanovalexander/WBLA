@@ -170,7 +170,9 @@ def _call_gemini(
     if thinking_budget is not None:
         config_kwargs["thinking_config"] = types.ThinkingConfig(
             thinking_budget=thinking_budget,
-            include_thoughts=True,   # Return thought parts alongside answer parts
+            # include_thoughts requires NO active tools — Gemini doesn't support both
+            # simultaneously and returns None parts when both are set, causing TypeError.
+            include_thoughts=(not tools),
         )
 
     config = types.GenerateContentConfig(**config_kwargs)
@@ -714,17 +716,6 @@ def call_llm_with_tools(
 
     client = _get_client()
 
-    config_kwargs: dict[str, Any] = {
-        "temperature": temperature,
-        "max_output_tokens": max_tokens,
-        "tools": tools,
-    }
-    if thinking_budget is not None:
-        config_kwargs["thinking_config"] = types.ThinkingConfig(
-            thinking_budget=thinking_budget
-        )
-    config = types.GenerateContentConfig(**config_kwargs)
-
     # Build conversation history for multi-turn tool use
     contents = [types.Content(role="user", parts=[types.Part(text=prompt)])]
 
@@ -776,7 +767,11 @@ def call_llm_with_tools(
         for candidate in response.candidates:
             if not candidate.content or not candidate.content.parts:
                 continue
-            for part in candidate.content.parts:
+            for part in (candidate.content.parts or []):
+                if part is None:
+                    continue  # Guard: API can return None entries in parts list
+                if getattr(part, "thought", False):
+                    continue  # Skip internal thinking parts — not function calls or answer text
                 if hasattr(part, "function_call") and part.function_call:
                     function_calls.append(part.function_call)
                 elif hasattr(part, "text") and part.text:
