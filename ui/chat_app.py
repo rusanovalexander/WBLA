@@ -39,13 +39,13 @@ def init_session_state():
     if "uploaded_files" not in st.session_state:
         st.session_state.uploaded_files = {}
 
-    if "orchestrator" not in st.session_state:
-        # Initialize orchestrator with agents
-        st.session_state.orchestrator = ConversationalOrchestrator()
-    else:
-        # Basic guard against stale/invalid orchestrator objects across reloads
-        if not hasattr(st.session_state.orchestrator, "process_message"):
+    if "orchestrator" not in st.session_state or not hasattr(st.session_state.get("orchestrator"), "process_message"):
+        try:
             st.session_state.orchestrator = ConversationalOrchestrator()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Failed to initialize orchestrator: %s", e, exc_info=True)
+            st.session_state.orchestrator = None
 
     if "pending_approval" not in st.session_state:
         st.session_state.pending_approval = None
@@ -109,6 +109,9 @@ def render_sidebar():
 
         # Governance status
         st.header("🔍 Governance")
+        if st.session_state.get("orchestrator") is None:
+            st.error("⚠️ Orchestrator failed to initialize. Check GCP credentials and restart.")
+            return
         gov_context = st.session_state.orchestrator.get_governance_context()
 
         if gov_context and gov_context.get("frameworks"):
@@ -341,6 +344,10 @@ def render_approval_checkpoint(next_suggestion: str, message_idx: int):
 
 def render_chat():
     """Render chat interface with thinking process."""
+
+    if st.session_state.get("orchestrator") is None:
+        st.error("⚠️ Orchestrator is not available. Check your GCP credentials and restart the app.")
+        return
 
     # Display chat history
     for idx, message in enumerate(st.session_state.messages):
@@ -717,7 +724,10 @@ def main():
     with col2:
         st.caption(f"📁 {len(st.session_state.uploaded_files)} files")
     with col3:
-        agent_comms = st.session_state.orchestrator.agent_bus.message_count
+        try:
+            agent_comms = st.session_state.orchestrator.agent_bus.message_count
+        except Exception:
+            agent_comms = 0
         st.caption(f"🔗 {agent_comms} agent queries")
 
 
