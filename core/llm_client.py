@@ -169,7 +169,8 @@ def _call_gemini(
     # Add thinking config for gemini-2.5 models
     if thinking_budget is not None:
         config_kwargs["thinking_config"] = types.ThinkingConfig(
-            thinking_budget=thinking_budget
+            thinking_budget=thinking_budget,
+            include_thoughts=True,   # Return thought parts alongside answer parts
         )
 
     config = types.GenerateContentConfig(**config_kwargs)
@@ -317,14 +318,32 @@ def call_llm(
 
             latency_ms = (time.time() - start_time) * 1000
 
-            # Guard: response.text can fail if no candidates (e.g., safety block, cancelled)
-            # It can also return None silently when the model responded with a pure
-            # function-call / tool-use part (no text part in candidates).
+            # Extract thought parts and text parts separately from candidates.
+            # When thinking_budget > 0 and include_thoughts=True, the response
+            # contains Part objects where part.thought == True for thinking text
+            # and part.thought == False (or absent) for the final answer text.
+            thought_parts: list[str] = []
+            text_parts: list[str] = []
             try:
-                result_text = response.text
-            except (ValueError, AttributeError):
-                result_text = None
-                logger.warning("Response had no text for %s (candidates may be empty)", agent_name)
+                if response.candidates:
+                    for part in response.candidates[0].content.parts:
+                        if getattr(part, "thought", False) and part.text:
+                            thought_parts.append(part.text)
+                        elif part.text:
+                            text_parts.append(part.text)
+            except (AttributeError, IndexError):
+                pass  # Fall back to response.text below
+
+            thinking_text = "".join(thought_parts)
+            result_text = "".join(text_parts) if text_parts else None
+
+            # Guard: fall back to response.text if part iteration yielded nothing
+            if not result_text:
+                try:
+                    result_text = response.text
+                except (ValueError, AttributeError):
+                    result_text = None
+                    logger.warning("Response had no text for %s (candidates may be empty)", agent_name)
 
             if not result_text:
                 result_text = "[No text in response — model may have returned empty/blocked output]"
@@ -360,6 +379,7 @@ def call_llm(
 
             return LLMCallResult(
                 text=result_text,
+                thinking=thinking_text,
                 model=model,
                 tokens_in=ctx["tokens_in"],
                 tokens_out=ctx["tokens_out"],
@@ -499,12 +519,15 @@ def _call_gemini_streaming(
     max_tokens: int,
     on_chunk: Callable[[str], None] | None = None,
     thinking_budget: int | None = None,
-) -> str:
+) -> tuple[str, str]:
     """
     Raw Gemini streaming API call with retry.
 
-    Returns the concatenated response text. Retryable exceptions
-    (429, 503, timeout, etc.) are retried by tenacity.
+    Returns (text, thinking) tuple — the concatenated answer text and any
+    thought-part text. Thought parts (part.thought == True) are collected
+    separately and NOT forwarded to on_chunk so they don't appear in the
+    live UI stream. Retryable exceptions (429, 503, timeout, etc.) are
+    retried by tenacity.
     """
     from google.genai import types
 
@@ -517,23 +540,41 @@ def _call_gemini_streaming(
 
     if thinking_budget is not None:
         config_kwargs["thinking_config"] = types.ThinkingConfig(
-            thinking_budget=thinking_budget
+            thinking_budget=thinking_budget,
+            include_thoughts=True,   # Return thought parts alongside answer parts
         )
 
     config = types.GenerateContentConfig(**config_kwargs)
 
-    chunks: list[str] = []
+    text_chunks: list[str] = []
+    thought_chunks: list[str] = []
+
     for chunk in client.models.generate_content_stream(
         model=model,
         contents=prompt,
         config=config,
     ):
+        # Iterate parts to separate thought text from answer text
+        try:
+            if chunk.candidates and chunk.candidates[0].content:
+                for part in chunk.candidates[0].content.parts:
+                    if getattr(part, "thought", False) and part.text:
+                        thought_chunks.append(part.text)
+                    elif part.text:
+                        text_chunks.append(part.text)
+                        if on_chunk:
+                            on_chunk(part.text)
+                continue  # Processed via parts — skip fallback below
+        except (AttributeError, IndexError):
+            pass
+
+        # Fallback: use chunk.text directly (no thought separation possible)
         if chunk.text:
-            chunks.append(chunk.text)
+            text_chunks.append(chunk.text)
             if on_chunk:
                 on_chunk(chunk.text)
 
-    return "".join(chunks)
+    return "".join(text_chunks), "".join(thought_chunks)
 
 
 def call_llm_streaming(
@@ -570,7 +611,7 @@ def call_llm_streaming(
 
     with tracer.trace_llm_call(agent_name, model, prompt) as ctx:
         try:
-            result_text = _call_gemini_streaming(
+            result_text, thinking_text = _call_gemini_streaming(
                 prompt=prompt,
                 model=model,
                 temperature=temperature,
@@ -585,6 +626,7 @@ def call_llm_streaming(
 
             return LLMCallResult(
                 text=result_text,
+                thinking=thinking_text,
                 model=model,
                 tokens_in=ctx["tokens_in"],
                 tokens_out=ctx["tokens_out"],

@@ -89,6 +89,7 @@ class LLMCallResult(BaseModel):
     """Result from an LLM call with metadata."""
     text: str
     model: str
+    thinking: str = ""          # Extended thinking text (Gemini part.thought == True)
     tokens_in: int = 0
     tokens_out: int = 0
     cost_usd: float = 0.0

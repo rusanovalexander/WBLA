@@ -534,6 +534,7 @@ class Writer:
         requirements = context.get("requirements", [])
         supplement_texts = context.get("supplement_texts", {})
         previously_drafted = context.get("previously_drafted", "")
+        user_additions_summary = context.get("user_additions_summary", "")  # User-requested additions
 
         # Format requirements
         filled_context = format_requirements_for_context(
@@ -586,6 +587,8 @@ Detail Level: {section.get('detail_level', 'Standard')}
 {previously_context}
 
 {f"### Agent Insights (from ProcessAnalyst and ComplianceAdvisor):{agent_insights}" if agent_insights else ""}
+
+{f"### USER REQUESTED ADDITIONS (MANDATORY — incorporate these into this section):\n{user_additions_summary}" if user_additions_summary else ""}
 
 ### Example Document (STYLE REFERENCE ONLY):
 {example_text}

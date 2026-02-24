@@ -456,6 +456,8 @@ class ConversationalOrchestratorV2:
             result = self._handle_show_communication(thinking)
         elif intent == "general_question":
             result = self._handle_general_question(message, thinking, reasoning)
+        elif intent == "lookup_procedure":
+            result = self._handle_lookup_procedure(message, thinking)
         else:
             result = self._handle_general(message, thinking)
 
@@ -475,8 +477,12 @@ class ConversationalOrchestratorV2:
             "uploaded_files": len([f for f in self.persistent_context["uploaded_files"].values() if f.get("analyzed")])
         }
 
-        # Add extended reasoning if available
-        result["reasoning"] = reasoning
+        # Add extended reasoning if available.
+        # Handlers that call LLMs with thinking_budget > 0 set result["reasoning"]
+        # to llm_result.thinking directly. If no handler set it, fall back to the
+        # reasoning returned by intent detection (always None currently — kept for
+        # future use if intent detection gains a thinking budget).
+        result.setdefault("reasoning", reasoning)
 
         return result
 
@@ -694,14 +700,18 @@ class ConversationalOrchestratorV2:
         7. draft_section - Draft a specific section
         8. query_agent - Direct query to an agent ("ask ProcessAnalyst about X")
         9. show_communication - Show agent-to-agent communication log
-        10. general_question - User asks a question about the deal/analysis
-        11. general - General guidance or unclear intent
+        10. general_question - User asks a question about the deal/analysis/teaser
+        11. lookup_procedure - User wants to look up a specific guideline, procedure, or policy
+            (e.g. "show me the SME guideline", "what does the procedure say about X",
+            "what are the requirements for Y", "show me the rule for Z")
+        12. general - General guidance or unclear intent
 
         RULES:
         - If user says "add", "more", "include", "enhance" → enhance_analysis
         - If user mentions "example", "similar", "reference deal" → search_examples
         - If analysis not done and user is asking about the deal → analyze_deal
-        - If user is asking a question (what/how/why) → general_question
+        - If user is asking a question (what/how/why) about the deal or teaser → general_question
+        - If user says "guideline", "procedure", "policy", "rule", "requirement", "show me" + topic → lookup_procedure
         - Be flexible with phrasing - understand natural language
 
         Return ONLY the intent name (one word/phrase from the list above).
@@ -724,7 +734,7 @@ class ConversationalOrchestratorV2:
                 "analyze_deal", "enhance_analysis", "discover_requirements",
                 "check_compliance", "search_examples", "generate_structure",
                 "draft_section", "query_agent", "show_communication",
-                "general_question", "general"
+                "general_question", "lookup_procedure", "general"
             ]
 
             if intent not in valid_intents:
@@ -804,15 +814,15 @@ class ConversationalOrchestratorV2:
                 thinking_budget=4000  # 🆕 Extended thinking
             )
 
-            # Update analysis
-            self.persistent_context["analysis"]["full_analysis"] += f"\n\n### Enhanced Analysis\n{enhancement}"
+            # Update analysis (use .text — enhancement is an LLMCallResult object)
+            self.persistent_context["analysis"]["full_analysis"] += f"\n\n### Enhanced Analysis\n{enhancement.text}"
 
             thinking.append("✓ Analysis enhanced")
 
             return {
                 "response": f"""## Analysis Enhanced
 
-{enhancement}
+{enhancement.text}
 
 ---
 💬 I've added the requested information to your analysis. Would you like me to:
@@ -820,6 +830,7 @@ class ConversationalOrchestratorV2:
 - Proceed to discover requirements?
 """,
                 "thinking": thinking,
+                "reasoning": enhancement.thinking or None,
                 "action": "analysis_enhanced",
                 "requires_approval": True,
                 "next_suggestion": "Discover requirements?",
@@ -887,32 +898,41 @@ For now, would you like me to proceed with the current analysis?
 
         thinking.append("💬 Answering question based on current context...")
 
-        # Build context for question answering
-        context_text = f"""
-        Conversation history:
-        {json.dumps(self.conversation_history[-6:], indent=2)}
+        # Build rich context — include raw teaser text so questions like
+        # "what does the teaser say about EBITDA?" can be answered directly.
+        teaser_text = self.persistent_context.get("teaser_text") or ""
+        analysis_obj = self.persistent_context.get("analysis") or {}
+        user_comments = self.persistent_context.get("user_comments") or []
 
-        Current analysis:
-        {json.dumps(self.persistent_context.get("analysis", {}), default=str, indent=2)[:2000]}
+        context_text = f"""TEASER TEXT (raw source document):
+{teaser_text[:4000]}
 
-        Uploaded files:
-        {list(self.persistent_context["uploaded_files"].keys())}
+ANALYSIS SUMMARY:
+{json.dumps(analysis_obj, default=str, indent=2)[:1500]}
 
-        Requirements:
-        {json.dumps(self.persistent_context.get("requirements", []), indent=2)[:1000]}
-        """
+REQUIREMENTS DISCOVERED:
+{json.dumps(self.persistent_context.get("requirements", []), indent=2)[:1000]}
 
-        qa_prompt = f"""
-        You are a helpful credit pack assistant.
+USER ADDITIONS / COMMENTS:
+{json.dumps(user_comments, indent=2)[:500]}
 
-        Context:
-        {context_text}
+CONVERSATION HISTORY (last 6 turns):
+{json.dumps(self.conversation_history[-6:], indent=2)}
 
-        User question: "{message}"
+UPLOADED FILES:
+{list(self.persistent_context["uploaded_files"].keys())}"""
 
-        Provide a clear, concise answer based on the available context.
-        If the information is not available, say so and suggest what needs to be done.
-        """
+        qa_prompt = f"""You are a helpful credit pack assistant with access to the deal documents.
+
+{context_text}
+
+USER QUESTION: "{message}"
+
+Answer clearly and concisely, grounding your answer in the teaser text or analysis above.
+Quote specific figures, names, or facts from the source documents where relevant.
+If the information is not available in the context, say so clearly and suggest what step
+would surface it (e.g. "Run analysis first" or "Upload the financial model").
+"""
 
         try:
             answer = call_llm(
@@ -920,14 +940,16 @@ For now, would you like me to proceed with the current analysis?
                 model=MODEL_FLASH,
                 tracer=self.tracer,
                 agent_name="QuestionAnswerer",
-                temperature=0.3
+                temperature=0.2,
+                thinking_budget=4000,   # Enable extended thinking for Q&A
             )
 
             thinking.append("✓ Answer generated")
 
             return {
-                "response": f"**Answer:** {answer}\n\n💬 Any other questions, or should we proceed?",
+                "response": f"{answer.text}\n\n💬 Any other questions, or should we proceed?",
                 "thinking": thinking,
+                "reasoning": answer.thinking or None,
                 "action": "question_answered",
                 "requires_approval": False,
                 "next_suggestion": None,
@@ -938,6 +960,88 @@ For now, would you like me to proceed with the current analysis?
             thinking.append(f"❌ Could not answer: {e}")
             return {
                 "response": f"❌ Could not answer your question: {str(e)}",
+                "thinking": thinking,
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": None,
+            }
+
+    def _handle_lookup_procedure(self, message: str, thinking: list[str]) -> dict:
+        """
+        Look up a specific guideline, procedure, or policy from the RAG knowledge base.
+
+        Triggered when user says things like:
+        - "show me the SME lending guideline"
+        - "what does the procedure say about covenant requirements?"
+        - "what are the rules for real estate lending?"
+        """
+        import re as _re
+
+        thinking.append("🔍 Searching procedure and guideline knowledge base...")
+
+        # Strip filler words to get a clean search query
+        search_query = _re.sub(
+            r"\b(show me|what does|what is|what are|the|guideline|guidelines|procedure|"
+            r"procedures|policy|policies|rule|rules|requirement|requirements|about|for|"
+            r"is|say|says|tell me|find|look up|search)\b",
+            " ", message, flags=_re.IGNORECASE
+        ).strip()
+        if not search_query:
+            search_query = message
+
+        # Search both procedure AND guideline RAG stores
+        proc_results = self.search_procedure(search_query, num_results=5)
+        guide_results = self.search_guidelines(search_query, num_results=3)
+
+        thinking.append(f"✓ Found {len(proc_results.get('results', []))} procedure results, "
+                        f"{len(guide_results.get('results', []))} guideline results")
+
+        result_prompt = f"""You are a credit policy expert. The user asked:
+
+"{message}"
+
+Here are the relevant procedure and guideline extracts retrieved from the knowledge base:
+
+## PROCEDURE RESULTS
+{json.dumps(proc_results, indent=2, default=str)[:3000]}
+
+## GUIDELINE RESULTS
+{json.dumps(guide_results, indent=2, default=str)[:1500]}
+
+Summarise the relevant rules, requirements and procedures clearly.
+- Quote specific requirements verbatim where important
+- Indicate the source document/section for each point
+- If the search did not return relevant results, say so and suggest refining the query
+- Use bullet points or a table for clarity
+"""
+
+        try:
+            answer = call_llm(
+                prompt=result_prompt,
+                model=MODEL_PRO,
+                tracer=self.tracer,
+                agent_name="ProcedureLookup",
+                temperature=0.1,
+                thinking_budget=4000,
+            )
+
+            thinking.append("✓ Procedure lookup complete")
+
+            return {
+                "response": answer.text,
+                "thinking": thinking,
+                "reasoning": answer.thinking or None,
+                "action": "procedure_lookup",
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": None,
+            }
+
+        except Exception as e:
+            thinking.append(f"❌ Procedure lookup failed: {e}")
+            return {
+                "response": f"❌ Could not search the procedure knowledge base: {str(e)}",
                 "thinking": thinking,
                 "action": None,
                 "requires_approval": False,
@@ -1425,6 +1529,23 @@ Total Checks: {len(checks)}
         if self.agent_bus.message_count == 0:
             thinking.append("💬 Writer may consult ProcessAnalyst or ComplianceAdvisor...")
 
+        # Build user additions summary from all stored comments
+        user_comments = self.persistent_context.get("user_comments", [])
+        user_additions_summary = ""
+        if user_comments:
+            additions_lines = [
+                f"- {c['message']}" for c in user_comments
+                if c.get("type") in ("enhance_analysis", "general", "user_addition")
+            ]
+            if additions_lines:
+                user_additions_summary = (
+                    "USER REQUESTED ADDITIONS (apply these across all sections):\n"
+                    + "\n".join(additions_lines)
+                )
+                thinking.append(f"📝 Applying {len(additions_lines)} user addition(s) to this section")
+                # Also persist so Writer can access via persistent_context if needed
+                self.persistent_context["user_additions_summary"] = user_additions_summary
+
         try:
             draft = self.writer.draft_section(
                 section=section,
@@ -1437,6 +1558,7 @@ Total Checks: {len(checks)}
                     "compliance_checks": self.persistent_context.get("compliance_checks", []),
                     "example_text": self.persistent_context.get("example_text") or "",
                     "previously_drafted": previously_drafted,
+                    "user_additions_summary": user_additions_summary,  # ← User's requested additions
                 },
                 on_stream=on_agent_stream,
             )
