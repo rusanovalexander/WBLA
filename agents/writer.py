@@ -145,7 +145,11 @@ SCENARIO: Drafting Process Methodology section
 **Language Conventions:**
 {writing_conventions}
 
-**Tables:** Use tables for numerical data, comparisons, key metrics
+**Tables:** Use tables for numerical data, comparisons, key metrics.
+ALWAYS format tables using markdown pipe syntax — NEVER use tab-separated columns:
+| Header 1 | Header 2 | Header 3 |
+|----------|----------|----------|
+| Value 1  | Value 2  | Value 3  |
 
 **Compliance Integration:** Reference compliance findings where relevant
 </WRITING_PRINCIPLES>
@@ -301,6 +305,71 @@ from models.schemas import SectionDraft
 import json
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Draft Content Extraction — strip internal scaffolding
+# =============================================================================
+
+def _extract_clean_draft(raw_text: str) -> tuple[str, str, str]:
+    """
+    Extract only the publishable content from the LLM's raw draft output.
+
+    The Writer LLM outputs three clearly-delimited blocks:
+        🧠 THINKING  ...
+        📝 DRAFTED SECTION  ...
+        📋 SECTION METADATA  ...
+
+    We want ONLY the content between the DRAFTED SECTION and SECTION METADATA
+    markers.  Everything else is internal audit data and must never appear in
+    the exported DOCX.
+
+    Returns:
+        (clean_content, thinking_notes, section_metadata)
+        If the markers are absent the whole text is treated as clean content
+        (graceful degradation for older prompts / models that skip them).
+    """
+    # Patterns for the three delimiters (emoji + text variants)
+    drafted_pattern = re.compile(
+        r"(?:📝\s*DRAFTED\s*SECTION|DRAFTED\s*SECTION)",
+        re.IGNORECASE,
+    )
+    metadata_pattern = re.compile(
+        r"(?:📋\s*SECTION\s*METADATA|SECTION\s*METADATA)",
+        re.IGNORECASE,
+    )
+    thinking_pattern = re.compile(
+        r"(?:🧠\s*THINKING|THINKING)",
+        re.IGNORECASE,
+    )
+
+    thinking_notes = ""
+    section_metadata = ""
+    clean_content = raw_text
+
+    drafted_match = drafted_pattern.search(raw_text)
+    metadata_match = metadata_pattern.search(raw_text)
+
+    if drafted_match:
+        # Extract content between DRAFTED SECTION and SECTION METADATA (or end)
+        start = drafted_match.end()
+        end = metadata_match.start() if metadata_match else len(raw_text)
+        clean_content = raw_text[start:end].strip()
+
+        # Extract thinking notes (everything before DRAFTED SECTION)
+        thinking_section = raw_text[:drafted_match.start()]
+        # Strip the leading THINKING header if present
+        thinking_match = thinking_pattern.search(thinking_section)
+        if thinking_match:
+            thinking_notes = thinking_section[thinking_match.end():].strip()
+        else:
+            thinking_notes = thinking_section.strip()
+
+        # Extract metadata (everything after SECTION METADATA)
+        if metadata_match:
+            section_metadata = raw_text[metadata_match.end():].strip()
+
+    return clean_content, thinking_notes, section_metadata
 
 
 # =============================================================================
@@ -543,24 +612,25 @@ Remember:
             on_chunk=on_stream,
         )
 
+        thinking_notes = ""
+        section_metadata = ""
+        compliance_review_notes = ""
+
         if not result.success:
-            content = f"[Section drafting failed: {result.error}]"
+            content = f"[SECTION PENDING — Drafting could not be completed ({result.error}). Please re-draft this section.]"
             self.tracer.record("Writer", "DRAFT_FAIL", result.error or "Unknown")
         else:
-            content = result.text
+            # Strip internal scaffolding — keep only the publishable content
+            content, thinking_notes, section_metadata = _extract_clean_draft(result.text)
             self.tracer.record("Writer", "DRAFT_COMPLETE", f"Drafted {len(content)} chars")
 
-        # Optional post-draft compliance review loop
+        # Optional post-draft compliance review loop — store notes separately,
+        # never appended to the publishable content
         if self.agent_bus and self._section_needs_compliance_input(section_name.lower()):
             try:
                 review_summary = self._run_compliance_review_subtask(section_name, content, context)
                 if review_summary:
-                    content = (
-                        content
-                        + "\n\n---\n"
-                        + "### Compliance Review Notes (Agentic Sub-Task)\n"
-                        + review_summary
-                    )
+                    compliance_review_notes = review_summary
             except Exception as e:
                 # Do not fail the draft if the review loop has issues
                 logger.debug("Compliance review sub-task failed: %s", e)
@@ -568,6 +638,9 @@ Remember:
         return SectionDraft(
             name=section_name,
             content=content,
+            thinking_notes=thinking_notes,
+            section_metadata=section_metadata,
+            compliance_review_notes=compliance_review_notes,
         )
 
     def _search_procedure_for_sections(

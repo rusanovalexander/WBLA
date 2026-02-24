@@ -174,6 +174,9 @@ class SectionDraft(BaseModel):
     agent_queries: list[AgentMessage] = Field(default_factory=list)
     facts_used: list[dict[str, str]] = Field(default_factory=list)
     missing_items: list[str] = Field(default_factory=list)
+    compliance_review_notes: str = ""   # internal — never exported to DOCX
+    thinking_notes: str = ""            # internal — never exported to DOCX
+    section_metadata: str = ""          # internal — never exported to DOCX
 
 
 # =============================================================================

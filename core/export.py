@@ -31,20 +31,20 @@ def generate_docx(
     Generate professional DOCX from markdown content.
 
     Args:
-        content: Markdown content
+        content: Markdown content (section bodies joined by ---)
         filename: Output filename
-        metadata: Optional metadata (deal_name, process_path, etc.)
+        metadata: Optional metadata (deal_name, borrower, process_path, etc.)
 
     Returns:
         Path to saved file, or "" on error
     """
     try:
         from docx import Document
-        from docx.shared import Pt, Inches, Cm, RGBColor
+        from docx.shared import Pt, Inches, RGBColor
         from docx.enum.text import WD_ALIGN_PARAGRAPH
         from docx.enum.table import WD_TABLE_ALIGNMENT
-        from docx.enum.section import WD_ORIENT
         from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
 
         doc = Document()
 
@@ -58,20 +58,20 @@ def generate_docx(
         section.right_margin = Inches(1.2)
 
         # ---- Styles ----
-        style = doc.styles["Normal"]
-        style.font.name = "Calibri"
-        style.font.size = Pt(10.5)
-        style.paragraph_format.space_after = Pt(6)
-        style.paragraph_format.line_spacing = 1.15
+        normal = doc.styles["Normal"]
+        normal.font.name = "Calibri"
+        normal.font.size = Pt(10.5)
+        normal.paragraph_format.space_after = Pt(6)
+        normal.paragraph_format.line_spacing = 1.15
 
         for level, (size, bold) in enumerate([(18, True), (14, True), (12, True)], 1):
-            heading_style = doc.styles[f"Heading {level}"]
-            heading_style.font.name = "Calibri"
-            heading_style.font.size = Pt(size)
-            heading_style.font.bold = bold
-            heading_style.font.color.rgb = RGBColor(0x1B, 0x3A, 0x5C)  # Dark blue
-            heading_style.paragraph_format.space_before = Pt(18 if level == 1 else 12)
-            heading_style.paragraph_format.space_after = Pt(8)
+            hs = doc.styles[f"Heading {level}"]
+            hs.font.name = "Calibri"
+            hs.font.size = Pt(size)
+            hs.font.bold = bold
+            hs.font.color.rgb = RGBColor(0x1B, 0x3A, 0x5C)
+            hs.paragraph_format.space_before = Pt(18 if level == 1 else 12)
+            hs.paragraph_format.space_after = Pt(8)
 
         # ---- Cover Page ----
         doc.add_paragraph()
@@ -86,36 +86,50 @@ def generate_docx(
         title_run.font.color.rgb = RGBColor(0x1B, 0x3A, 0x5C)
         title_run.font.name = "Calibri"
 
+        # Deal name: prefer analysis-derived name over raw filename
+        deal_name = ""
         if metadata:
+            # Try structured deal info first
+            deal_name = (
+                metadata.get("borrower_name")
+                or metadata.get("deal_name", "")
+            )
+            # Strip raw filename extension if that's all we have
+            if deal_name and deal_name.endswith((".txt", ".pdf", ".docx")):
+                deal_name = Path(deal_name).stem.replace("_", " ").replace("-", " ").title()
+
+        if deal_name:
             subtitle = doc.add_paragraph()
             subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            deal_name = metadata.get("deal_name", "")
-            if deal_name:
-                sub_run = subtitle.add_run(deal_name)
-                sub_run.font.size = Pt(16)
-                sub_run.font.color.rgb = RGBColor(0x4A, 0x4A, 0x4A)
+            sub_run = subtitle.add_run(deal_name)
+            sub_run.font.size = Pt(16)
+            sub_run.font.color.rgb = RGBColor(0x4A, 0x4A, 0x4A)
+            sub_run.font.name = "Calibri"
 
         doc.add_paragraph()
 
-        # Metadata table on cover
-        meta_para = doc.add_paragraph()
-        meta_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        meta_items = [
-            f"Generated: {datetime.now().strftime('%d %B %Y')}",
-            f"System: Credit Pack Multi-Agent PoC v{VERSION}",
+        # Cover details — assessment, origination, date only (no system version)
+        cover_items: list[tuple[str, str]] = [
+            ("Date", datetime.now().strftime("%d %B %Y")),
         ]
         if metadata:
             if metadata.get("process_path"):
-                meta_items.append(f"Assessment: {metadata['process_path']}")
+                cover_items.append(("Assessment Approach", metadata["process_path"]))
             if metadata.get("origination_method"):
-                meta_items.append(f"Origination: {metadata['origination_method']}")
+                cover_items.append(("Origination Method", metadata["origination_method"]))
+            if metadata.get("borrower_name"):
+                cover_items.insert(0, ("Borrower", metadata["borrower_name"]))
 
-        for item in meta_items:
+        for label, value in cover_items:
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(item)
-            run.font.size = Pt(10)
-            run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+            label_run = p.add_run(f"{label}: ")
+            label_run.font.size = Pt(10)
+            label_run.font.bold = True
+            label_run.font.color.rgb = RGBColor(0x1B, 0x3A, 0x5C)
+            val_run = p.add_run(value)
+            val_run.font.size = Pt(10)
+            val_run.font.color.rgb = RGBColor(0x4A, 0x4A, 0x4A)
 
         doc.add_paragraph()
         _add_classification_banner(doc, "CONFIDENTIAL — FOR INTERNAL USE ONLY")
@@ -123,21 +137,27 @@ def generate_docx(
         # Page break after cover
         doc.add_page_break()
 
-        # ---- Content ----
-        _render_markdown_to_docx(doc, content)
+        # ---- Table of Contents ----
+        toc_heading = doc.add_heading("Contents", level=1)
+        toc_heading.paragraph_format.space_before = Pt(0)
+        _add_table_of_contents(doc)
+        doc.add_page_break()
+
+        # ---- Content (with section numbering) ----
+        _render_markdown_to_docx(doc, content, number_h1=True)
 
         # ---- Footer ----
         footer = doc.sections[0].footer
         footer_para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
         footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         footer_run = footer_para.add_run(
-            f"Credit Pack — Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} — "
-            f"Multi-Agent System v{VERSION}"
+            f"Credit Pack — {deal_name} — "
+            f"Generated {datetime.now().strftime('%d %B %Y')} — CONFIDENTIAL"
         )
         footer_run.font.size = Pt(8)
         footer_run.font.color.rgb = RGBColor(0xA0, 0xA0, 0xA0)
 
-        # ---- Save to outputs folder (same as config.settings.OUTPUTS_FOLDER) ----
+        # ---- Save ----
         output_dir = Path(OUTPUTS_FOLDER)
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / filename
@@ -154,6 +174,42 @@ def generate_docx(
         return ""
 
 
+def _add_table_of_contents(doc) -> None:
+    """
+    Insert a Word TOC field that auto-updates when the document is opened.
+    Word renders this as a proper clickable Table of Contents.
+    """
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+
+    paragraph = doc.add_paragraph()
+    run = paragraph.add_run()
+    fldChar_begin = OxmlElement("w:fldChar")
+    fldChar_begin.set(qn("w:fldCharType"), "begin")
+    run._r.append(fldChar_begin)
+
+    instrText = OxmlElement("w:instrText")
+    instrText.set(qn("xml:space"), "preserve")
+    instrText.text = 'TOC \\o "1-3" \\h \\z \\u'
+    run._r.append(instrText)
+
+    fldChar_separate = OxmlElement("w:fldChar")
+    fldChar_separate.set(qn("w:fldCharType"), "separate")
+    run._r.append(fldChar_separate)
+
+    fldChar_end = OxmlElement("w:fldChar")
+    fldChar_end.set(qn("w:fldCharType"), "end")
+    run._r.append(fldChar_end)
+
+    # Instruction to user
+    note = doc.add_paragraph()
+    note_run = note.add_run("(Right-click → Update Field to refresh the Table of Contents)")
+    note_run.font.italic = True
+    note_run.font.size = __import__("docx.shared", fromlist=["Pt"]).Pt(9)
+    from docx.shared import RGBColor
+    note_run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+
+
 def _add_classification_banner(doc, text: str):
     """Add a classification banner paragraph."""
     from docx.shared import Pt, RGBColor
@@ -167,14 +223,35 @@ def _add_classification_banner(doc, text: str):
     run.font.color.rgb = RGBColor(0xCC, 0x00, 0x00)
 
 
-def _render_markdown_to_docx(doc, content: str):
-    """Convert markdown content to DOCX elements with proper formatting."""
+def _normalise_tables(content: str) -> str:
+    """Convert tab-separated table rows to markdown pipe format (safety net)."""
+    normalised = []
+    for line in content.split("\n"):
+        if "\t" in line and not line.strip().startswith("|"):
+            cells = [c.strip() for c in line.split("\t")]
+            if len(cells) >= 2:
+                line = "| " + " | ".join(cells) + " |"
+        normalised.append(line)
+    return "\n".join(normalised)
+
+
+def _render_markdown_to_docx(doc, content: str, number_h1: bool = False):
+    """Convert markdown content to DOCX elements with proper formatting.
+
+    Args:
+        doc: python-docx Document object
+        content: Markdown string to render
+        number_h1: If True, prefix every H1 heading with a sequential section number
+                   (e.g. "1. Executive Summary", "2. Borrower Overview", …)
+    """
     from docx.shared import Pt, Inches, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
+    content = _normalise_tables(content)
     lines = content.split("\n")
     current_table_rows: list[list[str]] = []
     in_table = False
+    h1_counter = 0  # section numbering counter
 
     for line in lines:
         stripped = line.strip()
@@ -198,7 +275,11 @@ def _render_markdown_to_docx(doc, content: str):
 
         # Headings — full hierarchy
         if stripped.startswith("# ") and not stripped.startswith("## "):
-            doc.add_heading(stripped[2:].strip(), level=1)
+            heading_text = stripped[2:].strip()
+            if number_h1:
+                h1_counter += 1
+                heading_text = f"{h1_counter}. {heading_text}"
+            doc.add_heading(heading_text, level=1)
         elif stripped.startswith("## ") and not stripped.startswith("### "):
             doc.add_heading(stripped[3:].strip(), level=2)
         elif stripped.startswith("### ") and not stripped.startswith("#### "):
@@ -243,17 +324,29 @@ def _render_markdown_to_docx(doc, content: str):
 
 
 def _add_formatted_text(paragraph, text: str):
-    """Add text to paragraph with bold/italic formatting preserved."""
+    """Add text to paragraph with bold/italic formatting preserved.
+
+    [INFORMATION REQUIRED: …] markers are rendered in red bold with a yellow
+    highlight background so they stand out clearly in the printed document.
+    """
     from docx.shared import RGBColor
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
 
     # Handle [INFORMATION REQUIRED: ...] markers
-    if "[INFORMATION REQUIRED:" in text:
-        parts = re.split(r"(\[INFORMATION REQUIRED:[^\]]+\])", text)
+    if "[INFORMATION REQUIRED" in text:
+        # Match both [INFORMATION REQUIRED: ...] and bare [INFORMATION REQUIRED]
+        parts = re.split(r"(\[INFORMATION REQUIRED[^\]]*\])", text)
         for part in parts:
-            if part.startswith("[INFORMATION REQUIRED:"):
+            if part.startswith("[INFORMATION REQUIRED"):
                 run = paragraph.add_run(part)
                 run.font.color.rgb = RGBColor(0xCC, 0x00, 0x00)
                 run.font.bold = True
+                # --- Yellow highlight via w:rPr / w:highlight ---
+                rPr = run._r.get_or_add_rPr()
+                highlight = OxmlElement("w:highlight")
+                highlight.set(qn("w:val"), "yellow")
+                rPr.append(highlight)
             else:
                 _add_inline_formatted(paragraph, part)
         return
