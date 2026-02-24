@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+.env
+.env.local
+*.env
+
+# Credentials
+*credential*.json
+*service-account*.json
+*key*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Outputs (generated files)
+outputs/*.docx
+outputs/*.txt
+outputs/*.pdf
+
+# Data (user documents — should not be in repo)
+data/teasers/*.pdf
+data/teasers/*.docx
+data/examples/*.pdf
+data/examples/*.docx
+data/procedure/*.pdf
+data/guidelines/*.pdf
