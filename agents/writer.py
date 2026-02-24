@@ -8,6 +8,7 @@ Key changes:
 """
 
 from __future__ import annotations
+import re
 from typing import Any
 
 from config.settings import AGENT_MODELS, AGENT_TEMPERATURES, get_verbose_block, PRODUCT_NAME, PRODUCT_ROLE, PRODUCT_AUDIENCE
