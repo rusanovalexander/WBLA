@@ -613,13 +613,27 @@ class ProcessAnalyst:
             try:
                 raw = self._run_analysis_native(teaser_text)
             except Exception as e:
-                logger.warning("Native tools failed: %s", e)
+                logger.warning("Native tools failed (%s) — using text-based fallback", e)
                 self.tracer.record("ProcessAnalyst", "FALLBACK", str(e))
                 raw = self._run_analysis_text_based(teaser_text, on_stream=on_stream)
         else:
             raw = self._run_analysis_text_based(teaser_text, on_stream=on_stream)
 
         decision = self._extract_structured_decision(raw["full_analysis"])
+
+        # Second-chance fallback: native tools ran but produced no extractable decision.
+        # Re-run text-based analysis so the user always gets a process path.
+        if use_native_tools and (not decision or not decision.get("assessment_approach")):
+            logger.warning(
+                "Native tools produced no structured decision — re-running text-based analysis"
+            )
+            self.tracer.record(
+                "ProcessAnalyst",
+                "FALLBACK_DECISION",
+                "No decision from native tools; re-running text-based path",
+            )
+            raw = self._run_analysis_text_based(teaser_text, on_stream=on_stream)
+            decision = self._extract_structured_decision(raw["full_analysis"])
 
         if decision:
             raw["process_path"] = decision.get("assessment_approach") or ""
@@ -761,6 +775,10 @@ class ProcessAnalyst:
 ## TASK
 Analyze and determine assessment approach and origination method.
 Search Procedure document AT LEAST 3 TIMES before recommending.
+
+CRITICAL: After completing your analysis you MUST output your structured decision
+in a <RESULT_JSON> block exactly as specified in your instructions above.
+Without this block the process path cannot be recorded.
 """
 
         result = call_llm_with_tools(
@@ -776,7 +794,18 @@ Search Procedure document AT LEAST 3 TIMES before recommending.
             thinking_budget=THINKING_BUDGET_LIGHT,
         )
 
-        return {"full_analysis": result.text, "procedure_sources": {}}
+        raw = {"full_analysis": result.text, "procedure_sources": {}}
+
+        # Validate that RESULT_JSON was produced — if not, raise so analyze_deal
+        # falls back to the text-based path which reliably produces the block.
+        import re as _re
+        if not _re.search(r'<RESULT_JSON>', result.text, _re.IGNORECASE):
+            raise RuntimeError(
+                "Native tools analysis did not produce a <RESULT_JSON> block — "
+                "falling back to text-based analysis"
+            )
+
+        return raw
 
     def _run_analysis_text_based(
         self,
