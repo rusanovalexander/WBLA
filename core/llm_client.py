@@ -326,12 +326,12 @@ def call_llm(
             text_parts: list[str] = []
             try:
                 if response.candidates:
-                    for part in response.candidates[0].content.parts:
+                    for part in response.candidates[0].content.parts or []:
                         if getattr(part, "thought", False) and part.text:
                             thought_parts.append(part.text)
                         elif part.text:
                             text_parts.append(part.text)
-            except (AttributeError, IndexError):
+            except (AttributeError, IndexError, TypeError):
                 pass  # Fall back to response.text below
 
             thinking_text = "".join(thought_parts)
@@ -557,7 +557,7 @@ def _call_gemini_streaming(
         # Iterate parts to separate thought text from answer text
         try:
             if chunk.candidates and chunk.candidates[0].content:
-                for part in chunk.candidates[0].content.parts:
+                for part in chunk.candidates[0].content.parts or []:
                     if getattr(part, "thought", False) and part.text:
                         thought_chunks.append(part.text)
                     elif part.text:
@@ -565,7 +565,7 @@ def _call_gemini_streaming(
                         if on_chunk:
                             on_chunk(part.text)
                 continue  # Processed via parts — skip fallback below
-        except (AttributeError, IndexError):
+        except (AttributeError, IndexError, TypeError):
             pass
 
         # Fallback: use chunk.text directly (no thought separation possible)
