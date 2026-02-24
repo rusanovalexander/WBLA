@@ -1634,15 +1634,14 @@ Total Checks: {len(checks)}
                 section=section,
                 context={
                     "teaser_text": self.persistent_context["teaser_text"],
-                    "analysis": self.persistent_context.get("analysis", {}),
                     "extracted_data": self.persistent_context["analysis"]["full_analysis"] if self.persistent_context.get("analysis") else "",
                     "requirements": self.persistent_context.get("requirements", []),
                     "compliance_result": self.persistent_context.get("compliance_result", ""),
-                    "compliance_checks": self.persistent_context.get("compliance_checks", []),
                     "example_text": self.persistent_context.get("example_text") or "",
                     "previously_drafted": previously_drafted,
                     "user_additions_summary": user_additions_summary,  # ← User's requested additions
                     "supplement_texts": _supplement_texts,  # ← supplementary docs for Writer
+                    "identified_gaps": (self.persistent_context.get("analysis") or {}).get("identified_gaps", []),  # ← confirmed gaps from analysis
                 },
                 on_stream=on_agent_stream,
                 on_thinking=thinking_parts.append,

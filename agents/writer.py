@@ -537,11 +537,32 @@ class Writer:
         supplement_texts = context.get("supplement_texts", {})
         previously_drafted = context.get("previously_drafted", "")
         user_additions_summary = context.get("user_additions_summary", "")  # User-requested additions
+        identified_gaps = context.get("identified_gaps", [])  # Confirmed gaps from analysis step
 
-        # Format requirements
-        filled_context = format_requirements_for_context(
-            requirements if isinstance(requirements, list) else []
-        )
+        # Separate requirements into filled vs empty
+        req_list = requirements if isinstance(requirements, list) else []
+        filled_reqs = [r for r in req_list if r.get("value") or r.get("status") == "filled"]
+        empty_reqs = [r for r in req_list if r.get("required") and not r.get("value")]
+
+        # Format filled requirements
+        filled_context = format_requirements_for_context(filled_reqs)
+
+        # Build empty requirements block — Writer uses this to place precise [INFORMATION REQUIRED] markers
+        empty_context = ""
+        if empty_reqs:
+            lines = []
+            for r in empty_reqs:
+                hint = r.get("source_hint", "not in documents")
+                ref = f" [{r['procedure_ref']}]" if r.get("procedure_ref") else ""
+                lines.append(f"- **{r['name']}**: {hint}{ref}")
+            # Also add any analysis-time identified gaps not already in empty_reqs
+            empty_names = {r.get("name", "") for r in empty_reqs}
+            for g in identified_gaps:
+                gname = g.get("name", "")
+                if gname and gname not in empty_names:
+                    rec = f" — {g['recommendation']}" if g.get("recommendation") else ""
+                    lines.append(f"- **{gname}** (confirmed gap from analysis{rec})")
+            empty_context = "\n".join(lines)
 
         # Format supplements
         supplement_context = ""
@@ -580,6 +601,8 @@ Detail Level: {section.get('detail_level', 'Standard')}
 
 ### Filled Requirements:
 {filled_context}
+
+{f"### Unfilled Requirements (use [INFORMATION REQUIRED: name] for each):{chr(10)}{empty_context}" if empty_context else ""}
 
 ### Compliance Assessment:
 {compliance_result}
