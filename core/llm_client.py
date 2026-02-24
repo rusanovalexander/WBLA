@@ -291,11 +291,17 @@ def call_llm(
             latency_ms = (time.time() - start_time) * 1000
 
             # Guard: response.text can fail if no candidates (e.g., safety block, cancelled)
+            # It can also return None silently when the model responded with a pure
+            # function-call / tool-use part (no text part in candidates).
             try:
                 result_text = response.text
             except (ValueError, AttributeError):
-                result_text = "[No text in response — model may have returned empty/blocked output]"
+                result_text = None
                 logger.warning("Response had no text for %s (candidates may be empty)", agent_name)
+
+            if not result_text:
+                result_text = "[No text in response — model may have returned empty/blocked output]"
+                logger.warning("response.text was None or empty for %s — possible pure tool-call response", agent_name)
 
             # Fix char-per-line fragmentation from multi-part responses
             result_text = _sanitize_response_text(result_text)
