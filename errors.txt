@@ -1,1 +1,2 @@
- Drafting failed: name 're' is not defined
+Native tools failed (Native tools analysis did not produce a <RESULT_JSON> block — falling back to text-based analysis) — using text-based fallback
+LLM call failed for ProcessAnalyst: 'NoneType' object is not iterable
