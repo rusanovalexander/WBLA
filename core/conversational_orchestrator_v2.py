@@ -424,6 +424,21 @@ class ConversationalOrchestratorV2:
         # 🆕 AUTO-ANALYZE UPLOADED FILES
         new_files = self._analyze_uploaded_files(uploaded_files, thinking)
 
+        # 🆕 COMPUTE NEW-FILE RE-ANALYSIS NOTE
+        # If new files arrived and there are empty required items, remind the user to re-run.
+        _new_file_note = ""
+        if new_files and self.persistent_context.get("requirements"):
+            _empty_reqs = [
+                r for r in self.persistent_context["requirements"]
+                if r.get("required") and not r.get("value")
+            ]
+            if _empty_reqs:
+                _new_file_note = (
+                    f"\n\n---\n📎 **{len(new_files)} new file(s) uploaded and analyzed.**  \n"
+                    f"Re-run **Requirements Discovery** to incorporate them and auto-fill "
+                    f"**{len(_empty_reqs)}** outstanding gap(s)."
+                )
+
         # Add user message to conversation history
         self.conversation_history.append({
             "role": "user",
@@ -460,6 +475,10 @@ class ConversationalOrchestratorV2:
             result = self._handle_lookup_procedure(message, thinking)
         else:
             result = self._handle_general(message, thinking)
+
+        # 🆕 INJECT NEW-FILE NOTE (skip if user just re-ran requirements discovery — avoids duplication)
+        if _new_file_note and intent != "discover_requirements" and result.get("response"):
+            result["response"] = result["response"] + _new_file_note
 
         # Add assistant response to conversation history
         self.conversation_history.append({
@@ -1272,6 +1291,17 @@ I can help you draft credit packs through natural conversation.
 
         thinking.append(f"📋 Using approach={assessment_approach!r}, method={origination_method!r}")
 
+        # Collect supplementary files (all uploaded docs that are NOT the teaser/example)
+        _req_teaser_fn = self.persistent_context.get("teaser_filename")
+        _req_example_fn = self.persistent_context.get("example_filename")
+        _req_supplement_texts = {
+            fn: d["content"]
+            for fn, d in self.persistent_context.get("uploaded_files", {}).items()
+            if fn not in (_req_teaser_fn, _req_example_fn) and d.get("analyzed")
+        }
+        if _req_supplement_texts:
+            thinking.append(f"📎 Passing {len(_req_supplement_texts)} supplementary doc(s) to requirements discovery")
+
         thinking_parts: list[str] = []
         try:
             requirements = self.analyst.discover_requirements(
@@ -1281,6 +1311,7 @@ I can help you draft credit packs through natural conversation.
                 identified_gaps=analysis.get("identified_gaps", []),
                 on_stream=on_agent_stream,
                 on_thinking=thinking_parts.append,
+                supplement_texts=_req_supplement_texts or None,
             )
 
             # Update context
@@ -1320,6 +1351,26 @@ I can help you draft credit packs through natural conversation.
             if rag_notice:
                 response += rag_notice
                 thinking.append("⚠️ Some Procedure searches failed — requirements may be incomplete")
+
+            # Add gap-suggestion note if there are unfilled required items
+            empty_required = [r for r in requirements if r.get("required") and not r.get("value")]
+            if empty_required:
+                gap_names = [r.get("name", "Unknown") for r in empty_required[:6]]
+                gap_note = (
+                    f"\n\n---\n**⚠️ {len(empty_required)} requirement(s) could not be filled "
+                    f"from available documents:**\n"
+                    + "\n".join(f"- {n}" for n in gap_names)
+                    + ("\n- *(and more…)*" if len(empty_required) > 6 else "")
+                    + "\n\n*Upload financial statements, valuations, or other supporting "
+                    "documents and re-run requirements discovery to auto-fill these gaps.*"
+                )
+                response = response + gap_note
+                thinking.append(f"💡 Added gap-suggestion note for {len(empty_required)} unfilled requirement(s)")
+
+            # Prepend any pending notes (e.g. new-file re-analysis hints)
+            pending_notes = self.persistent_context.pop("pending_notes", [])
+            if pending_notes:
+                response = "\n\n".join(pending_notes) + "\n\n" + response
 
             return {
                 "response": response,
@@ -1556,6 +1607,15 @@ Total Checks: {len(checks)}
                 # Also persist so Writer can access via persistent_context if needed
                 self.persistent_context["user_additions_summary"] = user_additions_summary
 
+        # Collect supplementary files (all uploaded docs that are NOT the teaser/example)
+        _teaser_fn = self.persistent_context.get("teaser_filename")
+        _example_fn = self.persistent_context.get("example_filename")
+        _supplement_texts = {
+            fn: d["content"]
+            for fn, d in self.persistent_context.get("uploaded_files", {}).items()
+            if fn not in (_teaser_fn, _example_fn) and d.get("analyzed")
+        }
+
         thinking_parts: list[str] = []
         try:
             draft = self.writer.draft_section(
@@ -1570,6 +1630,7 @@ Total Checks: {len(checks)}
                     "example_text": self.persistent_context.get("example_text") or "",
                     "previously_drafted": previously_drafted,
                     "user_additions_summary": user_additions_summary,  # ← User's requested additions
+                    "supplement_texts": _supplement_texts,  # ← supplementary docs for Writer
                 },
                 on_stream=on_agent_stream,
                 on_thinking=thinking_parts.append,

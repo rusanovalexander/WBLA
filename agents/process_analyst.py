@@ -541,7 +541,7 @@ REQUIREMENTS_DISCOVERY_PROMPT = """You are an analyst. Based on this deal analys
 {procedure_rag_context}
 
 {governance_categories}
-
+{supplement_context}
 ## CONFIRMED INFORMATION GAPS (MANDATORY empty requirements)
 The teaser analysis confirmed these items are missing from the deal documents.
 Each MUST be included as a requirement with status="empty":
@@ -684,6 +684,7 @@ class ProcessAnalyst:
         identified_gaps: list[dict] | None = None,
         on_stream: Callable[[str], None] | None = None,
         on_thinking: Callable[[str], None] | None = None,
+        supplement_texts: dict[str, str] | None = None,
     ) -> list[dict]:
         """Discover dynamic requirements."""
         self.tracer.record("RequirementsDiscovery", "START", "Discovering requirements")
@@ -737,6 +738,20 @@ class ProcessAnalyst:
         else:
             analysis_for_prompt = analysis_text
 
+        # Build supplementary documents context block
+        supplement_section = ""
+        if supplement_texts:
+            parts = []
+            for fname, ftext in supplement_texts.items():
+                parts.append(f"### {fname}\n{ftext[:3000]}")
+            supplement_section = (
+                "\n## ADDITIONAL SUPPORTING DOCUMENTS\n"
+                "Use information from these documents to fill requirement values "
+                "where the main teaser did not provide them.\n\n"
+                + "\n\n".join(parts)
+                + "\n"
+            )
+
         prompt = REQUIREMENTS_DISCOVERY_PROMPT.format(
             analysis_text=analysis_for_prompt,
             assessment_approach=assessment_approach or "assessment",
@@ -744,6 +759,7 @@ class ProcessAnalyst:
             procedure_rag_context=procedure_rag_context,
             governance_categories=governance_categories,
             identified_gaps_section=identified_gaps_section,
+            supplement_context=supplement_section,
         )
 
         if on_stream:
