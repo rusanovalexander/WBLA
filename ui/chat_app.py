@@ -114,11 +114,29 @@ def render_sidebar():
             return
         gov_context = st.session_state.orchestrator.get_governance_context()
 
-        if gov_context and gov_context.get("frameworks"):
-            for fw in gov_context["frameworks"]:
-                st.success(f"✓ {fw['name']}")
+        # governance_context uses keys from governance_discovery.py:
+        # discovery_status, requirement_categories, compliance_framework,
+        # risk_taxonomy, section_templates, search_vocabulary — NOT "frameworks"
+        gov_status = gov_context.get("discovery_status", "unknown") if gov_context else "unknown"
+        n_categories   = len(gov_context.get("requirement_categories", [])) if gov_context else 0
+        n_compliance   = len(gov_context.get("compliance_framework", [])) if gov_context else 0
+        n_risk         = len(gov_context.get("risk_taxonomy", [])) if gov_context else 0
+        n_vocab        = len(gov_context.get("search_vocabulary", [])) if gov_context else 0
+        n_templates    = len(gov_context.get("section_templates", {})) if gov_context else 0
+
+        if gov_status == "complete":
+            st.success("✓ Governance framework loaded")
+        elif gov_status == "partial":
+            st.warning("⚠️ Governance partially loaded")
         else:
-            st.info("No frameworks loaded")
+            st.error("✗ Governance not loaded")
+
+        if gov_context and gov_status != "failed":
+            st.caption(f"📋 {n_categories} requirement categories")
+            st.caption(f"✅ {n_compliance} compliance criteria")
+            st.caption(f"⚠️ {n_risk} risk categories")
+            st.caption(f"📄 {n_templates} section templates")
+            st.caption(f"🔍 {n_vocab} search terms")
 
         st.divider()
 
