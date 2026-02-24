@@ -423,30 +423,58 @@ def render_chat():
 
         with st.chat_message("assistant"):
             st.markdown("**Thinking**")
-            thinking_placeholder = st.empty()
             steps_shown = []
+            stream_buffer = []
+
+            # Create status box once — stable, never torn down mid-stream
+            with st.status("🤖 Re-running...", expanded=True) as replay_status:
+                replay_steps_container = st.empty()
+                replay_stream_placeholder = st.empty()
+
             while not shared_replay["done"] or not thinking_queue.empty():
+                updated = False
                 while True:
                     try:
-                        step = thinking_queue.get_nowait()
+                        item = thinking_queue.get_nowait()
                     except queue.Empty:
                         break
-                    if step is None:
+                    if item is None:
                         break
-                    steps_shown.append(step)
-                with thinking_placeholder.container():
-                    for s in steps_shown:
-                        if s.startswith("✓"):
-                            st.success(s)
-                        elif s.startswith("⏳"):
-                            st.info(s)
-                        elif s.startswith("❌") or s.startswith("⚠️"):
-                            st.warning(s)
-                        else:
-                            st.caption(s)
+                    if isinstance(item, tuple) and len(item) == 2:
+                        kind, text = item
+                        if kind == "step":
+                            steps_shown.append(text)
+                            updated = True
+                        elif kind == "chunk" and text:
+                            stream_buffer.append(text)
+                            updated = True
+                    else:
+                        # Legacy: plain string step items
+                        steps_shown.append(str(item))
+                        updated = True
+
+                if updated:
+                    with replay_steps_container.container():
+                        for s in steps_shown:
+                            if s.startswith("✓"):
+                                st.success(s)
+                            elif s.startswith("⏳"):
+                                st.info(s)
+                            elif s.startswith("❌") or s.startswith("⚠️"):
+                                st.warning(s)
+                            else:
+                                st.caption(s)
+                    if stream_buffer:
+                        replay_stream_placeholder.markdown("".join(stream_buffer))
+
                 if shared_replay["done"]:
+                    if shared_replay.get("error"):
+                        replay_status.update(label="❌ Error", state="error")
+                    else:
+                        replay_status.update(label="✅ Complete", state="complete")
                     break
-                time.sleep(0.25)
+
+                time.sleep(0.1)
 
             result = shared_replay["result"] or {
                 "response": "Re-run produced no result.",
@@ -497,7 +525,6 @@ def render_chat():
 
         with st.chat_message("assistant"):
             st.markdown("**Thinking**")
-            status_placeholder = st.empty()
             thinking_queue = queue.Queue()
             shared = {"result": None, "done": False, "error": None}
 
@@ -532,7 +559,14 @@ def render_chat():
 
             steps_shown = []
             stream_buffer = []
+
+            # Create status box once — stable, never torn down mid-stream
+            with st.status("🤖 Processing...", expanded=True) as status:
+                steps_container = st.empty()   # thinking steps rendered here
+                stream_placeholder = st.empty()  # live token stream rendered here
+
             while not shared["done"] or not thinking_queue.empty():
+                updated = False
                 while True:
                     try:
                         item = thinking_queue.get_nowait()
@@ -544,47 +578,45 @@ def render_chat():
                         kind, text = item
                         if kind == "step":
                             steps_shown.append(text)
+                            updated = True
                         elif kind == "chunk" and text:
                             stream_buffer.append(text)
+                            updated = True
                     else:
                         steps_shown.append(str(item))
-                status_placeholder.empty()
-                with status_placeholder.container():
-                    with st.status("🤖 Processing...", expanded=True) as status:
-                        if steps_shown:
-                            for step in steps_shown:
-                                if step.startswith("✓"):
-                                    st.success(step)
-                                elif step.startswith("⏳"):
-                                    st.info(step)
-                                elif step.startswith("❌") or step.startswith("⚠️"):
-                                    st.warning(step)
-                                elif step.startswith("💬"):
-                                    st.info(step)
-                                else:
-                                    st.write(step)
-                        if stream_buffer:
-                            st.markdown("---")
-                            st.markdown("**Model output (live):**")
-                            st.markdown("".join(stream_buffer))
-                        if not steps_shown and not stream_buffer:
-                            st.write("⏳ Analyzing message...")
-                        if shared["done"]:
-                            result = shared["result"]
-                            if shared.get("error"):
-                                st.error(f"Error: {str(shared['error'])}")
-                                status.update(label="❌ Error", state="error")
-                            elif result and "❌" in result.get("response", ""):
-                                status.update(label="❌ Error", state="error")
+                        updated = True
+
+                if updated:
+                    # Redraw thinking steps in-place
+                    with steps_container.container():
+                        for step in steps_shown:
+                            if step.startswith("✓"):
+                                st.success(step)
+                            elif step.startswith("⏳"):
+                                st.info(step)
+                            elif step.startswith("❌") or step.startswith("⚠️"):
+                                st.warning(step)
+                            elif step.startswith("💬"):
+                                st.info(step)
                             else:
-                                status.update(label="✅ Complete", state="complete")
+                                st.write(step)
+                    # Update live stream text in-place (no flicker)
+                    if stream_buffer:
+                        stream_placeholder.markdown("".join(stream_buffer))
+
                 if shared["done"]:
+                    result = shared["result"]
+                    if shared.get("error"):
+                        status.update(label="❌ Error", state="error")
+                    elif result and "❌" in result.get("response", ""):
+                        status.update(label="❌ Error", state="error")
+                    else:
+                        status.update(label="✅ Complete", state="complete")
                     break
-                time.sleep(0.25)
+
+                time.sleep(0.1)
 
             result = shared["result"]
-
-            status_placeholder.empty()
 
             # Display response
             st.markdown(result["response"])
