@@ -2,7 +2,7 @@
 Credit Pack Multi-Agent PoC v3.2 — Main Entry Point
 
 Run with:
-    streamlit run ui/app.py
+    streamlit run ui/chat_app.py
 
 Or for testing:
     python main.py
@@ -61,7 +61,7 @@ def main():
 
     print("\n" + "=" * 60)
     print("To start the UI:")
-    print("  streamlit run ui/app.py")
+    print("  streamlit run ui/chat_app.py")
     print("=" * 60)
 
 

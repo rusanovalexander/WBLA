@@ -60,6 +60,8 @@ class TraceStore:
     and export in the audit trail.
     """
 
+    MAX_ENTRIES = 2000  # Rolling cap — oldest entries trimmed when exceeded
+
     def __init__(self):
         self.entries: list[AgentTraceEntry] = []
         self.active_agent: str | None = None
@@ -105,6 +107,9 @@ class TraceStore:
             model=model,
         )
         self.entries.append(entry)
+        # Trim oldest entries when cap exceeded to prevent unbounded memory growth
+        if len(self.entries) > self.MAX_ENTRIES:
+            self.entries = self.entries[-self.MAX_ENTRIES:]
 
         # Update totals
         self._total_cost += cost_usd

@@ -33,8 +33,9 @@ jobs:
 
       - name: Run tests (pytest)
         run: |
-          pytest -q || true
+          pytest -q
 
       - name: Security audit (pip-audit)
         run: |
-          pip-audit -r requirements.txt || true
+          pip-audit -r requirements.txt
+        continue-on-error: true  # Advisory only — vulnerabilities reported but don't block CI

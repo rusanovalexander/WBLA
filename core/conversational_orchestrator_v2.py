@@ -587,7 +587,7 @@ class ConversationalOrchestratorV2:
             if isinstance(content, bytes):
                 try:
                     content = content.decode("utf-8")
-                except:
+                except UnicodeDecodeError:
                     thinking.append(f"⚠️ Could not decode {filename}")
                     continue
 

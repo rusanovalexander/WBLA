@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 from pydantic import ValidationError
 
 from models.schemas import SectionDraft
+from agents.writer import Writer
 
 
 # -----------------------------------------------------------------------------
