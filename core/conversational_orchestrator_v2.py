@@ -27,9 +27,9 @@ from agents import (
     create_compliance_advisor_responder,
 )
 from core.governance_discovery import run_governance_discovery
-from core.llm_client import call_llm
+from core.llm_client import call_llm, call_llm_streaming
 from tools.rag_search import tool_search_procedure, tool_search_guidelines
-from config.settings import MODEL_PRO, MODEL_FLASH
+from config.settings import MODEL_PRO, MODEL_FLASH, THINKING_BUDGET_LIGHT
 from core.tracing import get_tracer, TraceStore
 from models.task_state import TaskState
 from models.process_steps import (
@@ -454,7 +454,7 @@ class ConversationalOrchestratorV2:
         if intent == "analyze_deal":
             result = self._handle_analysis(message, thinking, reasoning, on_agent_stream)
         elif intent == "enhance_analysis":
-            result = self._handle_enhance_analysis(message, thinking, reasoning)
+            result = self._handle_enhance_analysis(message, thinking, reasoning, on_agent_stream)
         elif intent == "discover_requirements":
             result = self._handle_requirements(message, thinking, on_agent_stream)
         elif intent == "check_compliance":
@@ -470,11 +470,11 @@ class ConversationalOrchestratorV2:
         elif intent == "show_communication":
             result = self._handle_show_communication(thinking)
         elif intent == "general_question":
-            result = self._handle_general_question(message, thinking, reasoning)
+            result = self._handle_general_question(message, thinking, reasoning, on_agent_stream)
         elif intent == "lookup_procedure":
-            result = self._handle_lookup_procedure(message, thinking)
+            result = self._handle_lookup_procedure(message, thinking, on_agent_stream)
         else:
-            result = self._handle_general(message, thinking)
+            result = self._handle_general(message, thinking, on_agent_stream)
 
         # 🆕 INJECT NEW-FILE NOTE (skip if user just re-ran requirements discovery — avoids duplication)
         if _new_file_note and intent != "discover_requirements" and result.get("response"):
@@ -726,12 +726,28 @@ class ConversationalOrchestratorV2:
         12. general - General guidance or unclear intent
 
         RULES:
-        - If user says "add", "more", "include", "enhance" → enhance_analysis
-        - If user mentions "example", "similar", "reference deal" → search_examples
-        - If analysis not done and user is asking about the deal → analyze_deal
-        - If user is asking a question (what/how/why) about the deal or teaser → general_question
-        - If user says "guideline", "procedure", "policy", "rule", "requirement", "show me" + topic → lookup_procedure
-        - Be flexible with phrasing - understand natural language
+        1. ACTIONS — map to the action intent even when phrased as a question or polite request:
+           - "add", "include", "enhance", "more about", "can you add", "please add", "could you add" → enhance_analysis
+           - "can you analyze", "please analyze", "analyze this", "run analysis" → analyze_deal
+           - "can you check compliance", "run compliance", "check if compliant", "verify compliance" → check_compliance
+           - "find requirements", "discover requirements", "identify requirements", "can you find requirements" → discover_requirements
+           - "generate structure", "create structure", "what sections should", "can you generate structure" → generate_structure
+           - "draft [section name]", "write [section name]", "can you draft", "please draft" → draft_section
+           - "show me example", "similar deals", "find reference deal", "search examples" → search_examples
+           - "show me the guideline/procedure/rule/policy for", "what does the procedure say", "look up the guideline" → lookup_procedure
+
+        2. PURE QUESTIONS — map to general_question only if they are factual questions NOT requesting an action:
+           - "what is the loan amount?", "who is the sponsor?", "what does the teaser say about X?" → general_question
+           - "how much is the loan?", "what are the risks?", "what are we missing?" → general_question
+
+        3. CONTEXT-AWARE PROGRESSION — use current state to infer intent when user says "proceed", "next", "continue", "what's next":
+           - analysis NOT done → analyze_deal
+           - analysis done, requirements NOT done → discover_requirements
+           - requirements done, compliance NOT done → check_compliance
+           - compliance done, structure NOT done → generate_structure
+           - structure done → draft_section
+
+        4. FALLBACK — only for truly unclear intent, chit-chat, or greetings → general
 
         Return ONLY the intent name (one word/phrase from the list above).
         """
@@ -770,7 +786,8 @@ class ConversationalOrchestratorV2:
         self,
         message: str,
         thinking: list[str],
-        reasoning: str | None
+        reasoning: str | None,
+        on_agent_stream: Callable[[str], None] | None = None,
     ) -> dict:
         """
         🆕 Handle request to enhance/modify existing analysis.
@@ -824,13 +841,15 @@ class ConversationalOrchestratorV2:
             rag_results = self.search_procedure(search_query, num_results=5)
 
             # Generate enhanced analysis
-            enhancement = call_llm(
+            enhancement = call_llm_streaming(
                 prompt=enhancement_prompt + f"\n\nRAG Results:\n{json.dumps(rag_results, indent=2)[:1000]}",
                 model=MODEL_PRO,
                 tracer=self.tracer,
                 agent_name="AnalysisEnhancer",
                 temperature=0.3,
-                thinking_budget=4000  # 🆕 Extended thinking
+                max_tokens=4000,
+                on_chunk=on_agent_stream,
+                thinking_budget=THINKING_BUDGET_LIGHT,
             )
 
             # Update analysis (use .text — enhancement is an LLMCallResult object)
@@ -907,66 +926,97 @@ For now, would you like me to proceed with the current analysis?
         self,
         message: str,
         thinking: list[str],
-        reasoning: str | None
+        reasoning: str | None,
+        on_agent_stream: Callable[[str], None] | None = None,
     ) -> dict:
         """
-        🆕 Handle general questions about the deal/analysis.
+        Handle general questions and conversational requests about the deal.
 
-        User asks: "What's the loan amount?", "Who is the sponsor?", "What are the key risks?"
+        Works at any point in the workflow. Uses full deal context including
+        teaser, analysis, requirements, compliance, and uploaded files.
+        Streams the response live and saves action-oriented requests for drafting.
         """
 
-        thinking.append("💬 Answering question based on current context...")
+        thinking.append("💬 Answering based on full deal context...")
 
-        # Build rich context — include raw teaser text so questions like
-        # "what does the teaser say about EBITDA?" can be answered directly.
+        # Build full context — include everything available so far
         teaser_text = self.persistent_context.get("teaser_text") or ""
         analysis_obj = self.persistent_context.get("analysis") or {}
+        compliance_result = self.persistent_context.get("compliance_result") or ""
         user_comments = self.persistent_context.get("user_comments") or []
 
-        context_text = f"""TEASER TEXT (raw source document):
+        # Summarise requirements: show name+value for filled, name+hint for empty
+        req_lines = []
+        for r in self.persistent_context.get("requirements", []):
+            if r.get("value"):
+                req_lines.append(f"  ✅ {r['name']}: {r['value']}")
+            else:
+                hint = r.get("source_hint", "missing")
+                req_lines.append(f"  ⬜ {r['name']}: ({hint})")
+        req_summary = "\n".join(req_lines) if req_lines else "(not yet discovered)"
+
+        context_text = f"""TEASER (raw source):
 {teaser_text[:4000]}
 
 ANALYSIS SUMMARY:
 {json.dumps(analysis_obj, default=str, indent=2)[:1500]}
 
-REQUIREMENTS DISCOVERED:
-{json.dumps(self.persistent_context.get("requirements", []), indent=2)[:1000]}
+REQUIREMENTS ({len(self.persistent_context.get('requirements', []))} total):
+{req_summary}
 
-USER ADDITIONS / COMMENTS:
+COMPLIANCE ASSESSMENT:
+{compliance_result[:2000]}
+
+USER ADDITIONS SO FAR:
 {json.dumps(user_comments, indent=2)[:500]}
 
 CONVERSATION HISTORY (last 6 turns):
 {json.dumps(self.conversation_history[-6:], indent=2)}
 
-UPLOADED FILES:
-{list(self.persistent_context["uploaded_files"].keys())}"""
+UPLOADED FILES: {list(self.persistent_context['uploaded_files'].keys())}"""
 
-        qa_prompt = f"""You are a helpful credit pack assistant with access to the deal documents.
+        qa_prompt = f"""You are an expert credit analyst assistant with full access to the deal context below.
 
 {context_text}
 
-USER QUESTION: "{message}"
+USER MESSAGE: "{message}"
 
-Answer clearly and concisely, grounding your answer in the teaser text or analysis above.
-Quote specific figures, names, or facts from the source documents where relevant.
-If the information is not available in the context, say so clearly and suggest what step
-would surface it (e.g. "Run analysis first" or "Upload the financial model").
+Instructions:
+- If this is a QUESTION: answer precisely using the context above.
+  Quote specific figures, names, or facts from the source documents where relevant.
+  If the requested data is not yet available, say clearly which workflow step would surface it.
+- If this is a REQUEST to add, update, note, or incorporate something into the analysis
+  or the draft: acknowledge the request, confirm what will be incorporated, and be brief.
+- Always be professional and concise.
 """
 
+        # Save action-oriented requests so they flow into drafting as MANDATORY additions
+        _addition_triggers = ("add", "include", "update", "make sure", "also", "note",
+                              "don't forget", "remember", "incorporate", "mention", "ensure")
+        if any(w in message.lower() for w in _addition_triggers):
+            self.persistent_context["user_comments"].append({
+                "type": "user_addition",
+                "message": message,
+            })
+            thinking.append("💾 Saved as user addition — will be incorporated into drafts")
+
         try:
-            answer = call_llm(
+            # Stream the answer live
+            answer = call_llm_streaming(
                 prompt=qa_prompt,
-                model=MODEL_FLASH,
-                tracer=self.tracer,
-                agent_name="QuestionAnswerer",
+                model=MODEL_PRO,
                 temperature=0.2,
-                thinking_budget=4000,   # Enable extended thinking for Q&A
+                max_tokens=4000,
+                agent_name="QuestionAnswerer",
+                on_chunk=on_agent_stream,
+                tracer=self.tracer,
+                thinking_budget=THINKING_BUDGET_LIGHT,
             )
 
             thinking.append("✓ Answer generated")
 
             return {
-                "response": f"{answer.text}\n\n💬 Any other questions, or should we proceed?",
+                "response": answer.text,
                 "thinking": thinking,
                 "reasoning": answer.thinking or None,
                 "action": "question_answered",
@@ -986,7 +1036,12 @@ would surface it (e.g. "Run analysis first" or "Upload the financial model").
                 "agent_communication": None,
             }
 
-    def _handle_lookup_procedure(self, message: str, thinking: list[str]) -> dict:
+    def _handle_lookup_procedure(
+        self,
+        message: str,
+        thinking: list[str],
+        on_agent_stream: Callable[[str], None] | None = None,
+    ) -> dict:
         """
         Look up a specific guideline, procedure, or policy from the RAG knowledge base.
 
@@ -1036,13 +1091,15 @@ Summarise the relevant rules, requirements and procedures clearly.
 """
 
         try:
-            answer = call_llm(
+            answer = call_llm_streaming(
                 prompt=result_prompt,
                 model=MODEL_PRO,
                 tracer=self.tracer,
                 agent_name="ProcedureLookup",
                 temperature=0.1,
-                thinking_budget=4000,
+                max_tokens=4000,
+                on_chunk=on_agent_stream,
+                thinking_budget=THINKING_BUDGET_LIGHT,
             )
 
             thinking.append("✓ Procedure lookup complete")
@@ -1195,75 +1252,145 @@ Summarise the relevant rules, requirements and procedures clearly.
 
         return "All steps complete! Review your draft."
 
-    def _handle_general(self, message: str, thinking: list[str]) -> dict:
-        """Handle general questions and guidance (fallback when intent is unclear)."""
+    def _handle_general(
+        self,
+        message: str,
+        thinking: list[str],
+        on_agent_stream: Callable[[str], None] | None = None,
+    ) -> dict:
+        """
+        Handle fallback messages with a context-aware LLM response.
 
-        thinking.append("💡 Providing general guidance")
+        Previously showed a static help/status page. Now calls the LLM with the
+        full deal context so ANY message — chit-chat, ambiguous requests,
+        greetings — still gets a useful, personalised reply with a next-step
+        suggestion.
+        """
 
-        # Build status summary using persistent_context
-        status_parts = []
+        thinking.append("💡 Generating context-aware response...")
+
+        # ── Build workflow status summary ──────────────────────────────────
+        status_parts: list[str] = []
         if self.persistent_context.get("teaser_text"):
             status_parts.append(f"✓ Teaser loaded: {self.persistent_context['teaser_filename']}")
         else:
-            status_parts.append("○ No teaser uploaded")
+            status_parts.append("○ No teaser uploaded yet")
 
         if self.persistent_context.get("analysis"):
-            status_parts.append("✓ Analysis complete")
+            status_parts.append("✓ Deal analysis complete")
         else:
-            status_parts.append("○ Analysis pending")
+            status_parts.append("○ Analysis not yet run")
 
         if self.persistent_context.get("requirements"):
-            status_parts.append(f"✓ {len(self.persistent_context['requirements'])} requirements discovered")
+            filled = sum(1 for r in self.persistent_context["requirements"] if r.get("value"))
+            total = len(self.persistent_context["requirements"])
+            status_parts.append(f"✓ Requirements discovered: {filled}/{total} filled")
         else:
-            status_parts.append("○ Requirements pending")
+            status_parts.append("○ Requirements not yet discovered")
 
         if self.persistent_context.get("compliance_checks"):
-            status_parts.append(f"✓ {len(self.persistent_context['compliance_checks'])} compliance checks")
+            status_parts.append(f"✓ {len(self.persistent_context['compliance_checks'])} compliance checks done")
         else:
-            status_parts.append("○ Compliance pending")
+            status_parts.append("○ Compliance not yet checked")
 
         if self.persistent_context.get("structure"):
-            status_parts.append(f"✓ {len(self.persistent_context['structure'])} sections structured")
-            status_parts.append(f"✓ {len(self.persistent_context['drafts'])} sections drafted")
+            drafted = len(self.persistent_context.get("drafts", {}))
+            total_sections = len(self.persistent_context["structure"])
+            status_parts.append(f"✓ {drafted}/{total_sections} sections drafted")
         else:
-            status_parts.append("○ Structure pending")
+            status_parts.append("○ Structure not yet generated")
 
-        status = "\n".join(status_parts)
+        status_summary = "\n".join(status_parts)
+        next_step = self._suggest_next_step()
 
-        response = f"""## Credit Pack Assistant
+        # ── Full deal context ──────────────────────────────────────────────
+        teaser_text = self.persistent_context.get("teaser_text") or ""
+        analysis_obj = self.persistent_context.get("analysis") or {}
+        compliance_result = self.persistent_context.get("compliance_result") or ""
+        user_comments = self.persistent_context.get("user_comments") or []
 
-I can help you draft credit packs through natural conversation.
+        context_text = f"""WORKFLOW STATUS:
+{status_summary}
 
-**Current Status:**
-{status}
+SUGGESTED NEXT STEP: {next_step}
 
-**What I can do:**
-- **Analyze deals**: Upload a teaser and ask me to analyze it
-- **Discover requirements**: Extract key data points from the deal
-- **Check compliance**: Verify against regulatory guidelines
-- **Draft sections**: Generate credit pack sections with citations
-- **Agent queries**: Ask ProcessAnalyst or ComplianceAdvisor specific questions
+TEASER (first 3000 chars):
+{teaser_text[:3000]}
 
-**Agent Communication:**
-- Agents can consult each other autonomously during drafting
-- Use "Show communication log" to see agent-to-agent queries
-- Ask agents directly: "Ask ProcessAnalyst about the loan amount"
+ANALYSIS SUMMARY:
+{json.dumps(analysis_obj, default=str, indent=2)[:1500]}
 
-**Next Steps:**
-{self._suggest_next_step()}
+COMPLIANCE ASSESSMENT:
+{compliance_result[:1500]}
+
+USER ADDITIONS SO FAR:
+{json.dumps(user_comments, indent=2)[:400]}
+
+CONVERSATION HISTORY (last 6 turns):
+{json.dumps(self.conversation_history[-6:], indent=2)}
+
+UPLOADED FILES: {list(self.persistent_context['uploaded_files'].keys())}"""
+
+        general_prompt = f"""You are an expert credit analyst assistant helping to draft credit packs.
+
+{context_text}
+
+USER MESSAGE: "{message}"
+
+Instructions:
+- Respond helpfully and naturally, using the workflow status and deal context above.
+- If the user seems to be asking what to do next, suggest the next logical step clearly.
+- If the message is a greeting or small talk, respond warmly but pivot to the deal.
+- If the message could be an action request (add something, run a step, etc.), offer to
+  help and explain which command would achieve it.
+- Keep the response concise and professional (2-4 paragraphs max).
+- At the end, always suggest the single most useful next action the user can take.
 """
-        rag_notice = self._rag_error_notice()
-        if rag_notice:
-            response += rag_notice
 
-        return {
-            "response": response,
-            "thinking": thinking,
-            "action": None,
-            "requires_approval": False,
-            "next_suggestion": None,
-            "agent_communication": None,
-        }
+        try:
+            answer = call_llm_streaming(
+                prompt=general_prompt,
+                model=MODEL_PRO,
+                temperature=0.3,
+                max_tokens=2000,
+                agent_name="GeneralAssistant",
+                on_chunk=on_agent_stream,
+                tracer=self.tracer,
+                thinking_budget=THINKING_BUDGET_LIGHT,
+            )
+
+            thinking.append("✓ Context-aware response generated")
+
+            rag_notice = self._rag_error_notice()
+            response_text = answer.text + (rag_notice or "")
+
+            return {
+                "response": response_text,
+                "thinking": thinking,
+                "reasoning": answer.thinking or None,
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": next_step,
+                "agent_communication": None,
+            }
+
+        except Exception as e:
+            thinking.append(f"❌ Could not generate response: {e}")
+            # Graceful static fallback if LLM fails
+            rag_notice = self._rag_error_notice()
+            fallback = (
+                f"## Credit Pack Assistant\n\n"
+                f"**Current Status:**\n{status_summary}\n\n"
+                f"**Next Step:** {next_step}\n"
+            ) + (rag_notice or "")
+            return {
+                "response": fallback,
+                "thinking": thinking,
+                "action": None,
+                "requires_approval": False,
+                "next_suggestion": next_step,
+                "agent_communication": None,
+            }
     def _handle_requirements(self, message: str, thinking: list[str], on_agent_stream: Callable[[str], None] | None = None) -> dict:
         """Handle requirements discovery request."""
 
