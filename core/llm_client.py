@@ -89,6 +89,25 @@ try:
 except ImportError:
     GenaiClientError = None
 
+# Network-level transient errors from httpx / httpcore (streaming path)
+# "peer closed connection without sending complete message body" is a transient
+# TCP-level fault that should be retried, not surfaced as a hard failure.
+try:
+    import httpx as _httpx
+    import httpcore as _httpcore
+    RETRYABLE_EXCEPTIONS = (
+        *RETRYABLE_EXCEPTIONS,
+        _httpx.RemoteProtocolError,
+        _httpx.ReadError,
+        _httpx.ConnectError,
+        _httpx.TimeoutException,
+        _httpcore.RemoteProtocolError,
+        _httpcore.ReadError,
+        _httpcore.ConnectError,
+    )
+except ImportError:
+    pass
+
 
 def _is_retryable(exception: BaseException) -> bool:
     """Check if an exception is retryable (rate limit or transient error)."""
@@ -97,7 +116,15 @@ def _is_retryable(exception: BaseException) -> bool:
     # google.genai.errors.ClientError with 429 status
     if GenaiClientError and isinstance(exception, GenaiClientError):
         status = getattr(exception, 'status', 0) or getattr(exception, 'code', 0)
-        return status == 429
+        if status == 429:
+            return True
+        # 503 / 500 from the genai client-side wrapper are also retryable
+        if status in (500, 503):
+            return True
+    # Catch-all for any exception whose message mentions retriable conditions
+    msg = str(exception).lower()
+    if any(kw in msg for kw in ("resource exhausted", "rate limit", "incomplete chunked read", "peer closed connection")):
+        return True
     return False
 
 
