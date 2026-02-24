@@ -416,6 +416,7 @@ class ComplianceAdvisor:
         extracted_data: str,
         use_native_tools: bool = True,
         on_stream: Callable[[str], None] | None = None,
+        on_thinking: Callable[[str], None] | None = None,
     ) -> tuple[str, list[dict]]:
         """
         Complete compliance assessment including RAG search and extraction.
@@ -447,11 +448,11 @@ class ComplianceAdvisor:
                 logger.warning("Native compliance tools failed: %s", e)
                 self.tracer.record("ComplianceAdvisor", "FALLBACK", str(e))
                 result_text = self._run_compliance_text_based(
-                    filled_data, teaser_text, extracted_data, on_stream=on_stream
+                    filled_data, teaser_text, extracted_data, on_stream=on_stream, on_thinking=on_thinking
                 )
         else:
             result_text = self._run_compliance_text_based(
-                filled_data, teaser_text, extracted_data, on_stream=on_stream
+                filled_data, teaser_text, extracted_data, on_stream=on_stream, on_thinking=on_thinking
             )
 
         # Extract structured compliance checks
@@ -529,6 +530,7 @@ Follow the OUTPUT_STRUCTURE from your instructions.
         teaser_text: str,
         extracted_data: str,
         on_stream: Callable[[str], None] | None = None,
+        on_thinking: Callable[[str], None] | None = None,
     ) -> str:
         """Run compliance using text-based tool calls (fallback)."""
 
@@ -645,6 +647,9 @@ Use ONLY the information from your RAG searches above when citing Guidelines lim
         if not assessment.success:
             self.tracer.record("ComplianceAdvisor", "LLM_FAIL", f"Assessment failed: {assessment.error}")
             return f"[Compliance assessment failed: {assessment.error}]"
+
+        if assessment.thinking and on_thinking:
+            on_thinking(assessment.thinking)
 
         return assessment.text
 

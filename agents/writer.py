@@ -516,6 +516,7 @@ class Writer:
         section: dict[str, str],
         context: dict[str, Any],
         on_stream: Callable[[str], None] | None = None,
+        on_thinking: Callable[[str], None] | None = None,
     ) -> SectionDraft:
         """Draft a document section.
 
@@ -615,6 +616,9 @@ Remember:
             thinking_budget=THINKING_BUDGET_STANDARD,
             on_chunk=on_stream,
         )
+
+        if result.thinking and on_thinking:
+            on_thinking(result.thinking)
 
         thinking_notes = ""
         section_metadata = ""

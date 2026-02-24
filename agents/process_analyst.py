@@ -616,6 +616,7 @@ class ProcessAnalyst:
         teaser_text: str,
         use_native_tools: bool = True,
         on_stream: Callable[[str], None] | None = None,
+        on_thinking: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         """Complete deal analysis including process path determination."""
         self.tracer.record("ProcessAnalyst", "START", "Beginning analysis")
@@ -626,9 +627,9 @@ class ProcessAnalyst:
             except Exception as e:
                 logger.warning("Native tools failed (%s) — using text-based fallback", e)
                 self.tracer.record("ProcessAnalyst", "FALLBACK", str(e))
-                raw = self._run_analysis_text_based(teaser_text, on_stream=on_stream)
+                raw = self._run_analysis_text_based(teaser_text, on_stream=on_stream, on_thinking=on_thinking)
         else:
-            raw = self._run_analysis_text_based(teaser_text, on_stream=on_stream)
+            raw = self._run_analysis_text_based(teaser_text, on_stream=on_stream, on_thinking=on_thinking)
 
         decision = self._extract_structured_decision(raw["full_analysis"])
 
@@ -643,7 +644,7 @@ class ProcessAnalyst:
                 "FALLBACK_DECISION",
                 "No decision from native tools; re-running text-based path",
             )
-            raw = self._run_analysis_text_based(teaser_text, on_stream=on_stream)
+            raw = self._run_analysis_text_based(teaser_text, on_stream=on_stream, on_thinking=on_thinking)
             decision = self._extract_structured_decision(raw["full_analysis"])
 
         if decision:
@@ -682,6 +683,7 @@ class ProcessAnalyst:
         origination_method: str,
         identified_gaps: list[dict] | None = None,
         on_stream: Callable[[str], None] | None = None,
+        on_thinking: Callable[[str], None] | None = None,
     ) -> list[dict]:
         """Discover dynamic requirements."""
         self.tracer.record("RequirementsDiscovery", "START", "Discovering requirements")
@@ -758,6 +760,9 @@ class ProcessAnalyst:
                 "RequirementsDiscovery", self.tracer,
                 thinking_budget=THINKING_BUDGET_LIGHT
             )
+
+        if result.thinking and on_thinking:
+            on_thinking(result.thinking)
 
         if not result.success:
             self.tracer.record("RequirementsDiscovery", "FAIL", result.error or "Unknown")
@@ -890,6 +895,7 @@ class ProcessAnalyst:
         self,
         teaser_text: str,
         on_stream: Callable[[str], None] | None = None,
+        on_thinking: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         """Text-based fallback."""
         planning_prompt = f"""{self.instruction}
@@ -953,6 +959,9 @@ Produce FULL analysis with assessment approach and origination method.
 
         if not analysis.success:
             return {"full_analysis": f"[Failed: {analysis.error}]", "procedure_sources": {}}
+
+        if analysis.thinking and on_thinking:
+            on_thinking(analysis.thinking)
 
         return {"full_analysis": analysis.text, "procedure_sources": procedure_results}
 

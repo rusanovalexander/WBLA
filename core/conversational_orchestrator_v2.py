@@ -1070,11 +1070,13 @@ Summarise the relevant rules, requirements and procedures clearly.
         thinking.append("⏳ Running ProcessAnalyst analysis...")
 
         # Run analysis
+        thinking_parts: list[str] = []
         try:
             result = self.analyst.analyze_deal(
                 teaser_text=self.persistent_context["teaser_text"],
                 use_native_tools=True,
                 on_stream=on_agent_stream,
+                on_thinking=thinking_parts.append,
             )
 
             # Update context
@@ -1129,6 +1131,7 @@ Summarise the relevant rules, requirements and procedures clearly.
             return {
                 "response": response,
                 "thinking": thinking,
+                "reasoning": "\n\n".join(thinking_parts) or None,
                 "action": "analysis_complete",
                 "requires_approval": True,
                 "next_suggestion": "Discover requirements based on this analysis?",
@@ -1269,6 +1272,7 @@ I can help you draft credit packs through natural conversation.
 
         thinking.append(f"📋 Using approach={assessment_approach!r}, method={origination_method!r}")
 
+        thinking_parts: list[str] = []
         try:
             requirements = self.analyst.discover_requirements(
                 analysis_text=analysis["full_analysis"],
@@ -1276,6 +1280,7 @@ I can help you draft credit packs through natural conversation.
                 origination_method=origination_method,
                 identified_gaps=analysis.get("identified_gaps", []),
                 on_stream=on_agent_stream,
+                on_thinking=thinking_parts.append,
             )
 
             # Update context
@@ -1319,6 +1324,7 @@ I can help you draft credit packs through natural conversation.
             return {
                 "response": response,
                 "thinking": thinking,
+                "reasoning": "\n\n".join(thinking_parts) or None,
                 "action": "requirements_discovered",
                 "requires_approval": True,
                 "next_suggestion": "Run compliance checks on these requirements?",
@@ -1352,6 +1358,7 @@ I can help you draft credit packs through natural conversation.
         thinking.append("⏳ Running ComplianceAdvisor assessment...")
         thinking.append(f"📋 Checking {len(self.persistent_context['requirements'])} requirements...")
 
+        thinking_parts: list[str] = []
         try:
             result_text, checks = self.advisor.assess_compliance(
                 requirements=self.persistent_context["requirements"],
@@ -1359,6 +1366,7 @@ I can help you draft credit packs through natural conversation.
                 extracted_data=self.persistent_context["analysis"]["full_analysis"],
                 use_native_tools=True,
                 on_stream=on_agent_stream,
+                on_thinking=thinking_parts.append,
             )
 
             # Update context
@@ -1390,6 +1398,7 @@ Total Checks: {len(checks)}
             return {
                 "response": response,
                 "thinking": thinking,
+                "reasoning": "\n\n".join(thinking_parts) or None,
                 "action": "compliance_complete",
                 "requires_approval": True,
                 "next_suggestion": "Generate document structure for drafting?",
@@ -1547,6 +1556,7 @@ Total Checks: {len(checks)}
                 # Also persist so Writer can access via persistent_context if needed
                 self.persistent_context["user_additions_summary"] = user_additions_summary
 
+        thinking_parts: list[str] = []
         try:
             draft = self.writer.draft_section(
                 section=section,
@@ -1562,6 +1572,7 @@ Total Checks: {len(checks)}
                     "user_additions_summary": user_additions_summary,  # ← User's requested additions
                 },
                 on_stream=on_agent_stream,
+                on_thinking=thinking_parts.append,
             )
 
             # Update context
@@ -1591,6 +1602,7 @@ Total Checks: {len(checks)}
             return {
                 "response": response,
                 "thinking": thinking,
+                "reasoning": "\n\n".join(thinking_parts) or None,
                 "action": "section_drafted",
                 "requires_approval": True,
                 "next_suggestion": f"Draft next section: '{next_section}'?" if next_section else "All sections complete!",
