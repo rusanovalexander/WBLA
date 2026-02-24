@@ -542,11 +542,22 @@ REQUIREMENTS_DISCOVERY_PROMPT = """You are an analyst. Based on this deal analys
 
 {governance_categories}
 
+## CONFIRMED INFORMATION GAPS (MANDATORY empty requirements)
+The teaser analysis confirmed these items are missing from the deal documents.
+Each MUST be included as a requirement with status="empty":
+{identified_gaps_section}
+
 ## TASK
-1. Discover ALL information requirements specifically needed for a **{origination_method}** under the **{assessment_approach}** approach, as defined in the Procedure.
-2. For EACH requirement, check if the deal analysis above already contains data that addresses it.
-3. If data IS available in the analysis, set "value" to a summary of that data and "status" to "filled".
-4. If data is NOT available, set "value" to "" and "status" to "empty".
+1. Discover ALL information requirements specifically needed for a **{origination_method}**
+   under the **{assessment_approach}** approach, as defined in the Procedure.
+2. ALWAYS include the confirmed gaps above as empty requirements — these are definitively
+   missing from the teaser and must be collected before drafting.
+3. For EACH requirement, check if the deal analysis above already contains data that addresses it.
+4. If data IS available in the analysis, set "value" to a summary of that data and "status" to "filled".
+5. If data is NOT available, set "value" to "" and "status" to "empty".
+6. Do NOT include sections that will be drafted/written in the credit pack
+   (e.g. "Conclusion", "Policy Compliance section", "Recommendation") — only include
+   information/data items needed as INPUT to write the credit pack.
 
 IMPORTANT:
 - Requirements should be SPECIFIC to the {origination_method} process, not generic documentation checklists.
@@ -653,6 +664,14 @@ class ProcessAnalyst:
             raw["fallback_used"] = False
             self.tracer.record("ProcessAnalyst", "WARNING", "No clear decision")
 
+        raw["identified_gaps"] = self._extract_gaps_from_analysis(
+            raw.get("full_analysis", "")
+        )
+        self.tracer.record(
+            "ProcessAnalyst", "GAPS_EXTRACTED",
+            f"Extracted {len(raw['identified_gaps'])} identified gaps",
+        )
+
         self.tracer.record("ProcessAnalyst", "COMPLETE", f"Analysis: {raw['process_path']}")
         return raw
 
@@ -661,6 +680,7 @@ class ProcessAnalyst:
         analysis_text: str,
         assessment_approach: str,
         origination_method: str,
+        identified_gaps: list[dict] | None = None,
         on_stream: Callable[[str], None] | None = None,
     ) -> list[dict]:
         """Discover dynamic requirements."""
@@ -671,15 +691,46 @@ class ProcessAnalyst:
         )
         governance_categories = self._build_governance_categories_hint()
 
-        # The analysis text can be 15K+ chars. The LLM needs to see the
-        # COMPREHENSIVE EXTRACTION section (which contains extracted data values)
-        # and the RESULT_JSON section (at the end). Send a generous portion.
-        # If too long, take first 5000 + last 5000 to cover both context and data.
-        if len(analysis_text) > 10000:
+        # Build the confirmed gaps section for the prompt
+        gaps = identified_gaps or []
+        if gaps:
+            lines = []
+            for i, g in enumerate(gaps, 1):
+                line = f"{i}. **{g['name']}** (Impact: {g.get('impact', '?')})"
+                if g.get("recommendation"):
+                    line += f" — {g['recommendation']}"
+                lines.append(line)
+            identified_gaps_section = "\n".join(lines)
+        else:
+            identified_gaps_section = "(No confirmed gaps extracted from analysis)"
+
+        self.tracer.record(
+            "RequirementsDiscovery", "GAPS_INJECTED",
+            f"Injecting {len(gaps)} confirmed gaps into requirements prompt",
+        )
+
+        # Smart truncation: preserve the IDENTIFIED GAPS block even if analysis is long.
+        # HEAD covers THINKING + start of EXTRACTION; GAP_MAX covers the gaps table;
+        # TAIL covers RESULT_JSON and final data. Total budget ~10K chars.
+        MAX_TOTAL, HEAD, GAP_MAX, TAIL = 10_000, 4_000, 2_000, 3_000
+        if len(analysis_text) > MAX_TOTAL:
+            import re as _re
+            gap_marker = _re.search(
+                r'###?\s*[^\n]*IDENTIFIED GAPS[^\n]*', analysis_text, _re.IGNORECASE
+            )
+            if gap_marker:
+                g_start = gap_marker.start()
+                next_sec = _re.search(r'^###?\s', analysis_text[gap_marker.end():], _re.MULTILINE)
+                g_end = (gap_marker.end() + next_sec.start()) if next_sec else (g_start + GAP_MAX)
+                gap_block = analysis_text[g_start:g_end][:GAP_MAX]
+            else:
+                gap_block = ""
             analysis_for_prompt = (
-                analysis_text[:5000]
-                + "\n\n[... middle section omitted for brevity ...]\n\n"
-                + analysis_text[-5000:]
+                analysis_text[:HEAD]
+                + "\n\n[...middle omitted...]\n\n"
+                + gap_block
+                + ("\n\n[...omitted...]\n\n" if gap_block else "")
+                + analysis_text[-TAIL:]
             )
         else:
             analysis_for_prompt = analysis_text
@@ -690,6 +741,7 @@ class ProcessAnalyst:
             origination_method=origination_method or "origination",
             procedure_rag_context=procedure_rag_context,
             governance_categories=governance_categories,
+            identified_gaps_section=identified_gaps_section,
         )
 
         if on_stream:
@@ -959,6 +1011,38 @@ Produce FULL analysis with assessment approach and origination method.
         )
         return normalized
 
+    @staticmethod
+    def _extract_gaps_from_analysis(analysis_text: str) -> list[dict]:
+        """Parse the IDENTIFIED GAPS AND UNCERTAINTIES markdown table from analysis text.
+        Returns list of dicts: {"name": str, "impact": str, "recommendation": str}.
+        Returns [] if the section is absent.
+        """
+        import re
+
+        section_match = re.search(
+            r'###?\s*[^\n]*IDENTIFIED GAPS[^\n]*\n',
+            analysis_text,
+            re.IGNORECASE,
+        )
+        if not section_match:
+            return []
+
+        section_start = section_match.end()
+        next_heading = re.search(r'^###?\s', analysis_text[section_start:], re.MULTILINE)
+        section_end = section_start + next_heading.start() if next_heading else len(analysis_text)
+        section_text = analysis_text[section_start:section_end]
+
+        row_pattern = re.compile(r'^\|(.+?)\|(.+?)\|(.+?)\|', re.MULTILINE)
+        gaps: list[dict] = []
+        for m in row_pattern.finditer(section_text):
+            col1, col2, col3 = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+            if col1.lower() in ('gap/uncertainty', 'gap', 'uncertainty'):
+                continue  # header row
+            if re.match(r'^[-:\s]+$', col1) or not col1:
+                continue  # separator or empty
+            gaps.append({"name": col1, "impact": col2, "recommendation": col3})
+        return gaps
+
     def _search_procedure_for_requirements(self, origination_method: str, assessment_approach: str) -> str:
         """Search for requirements."""
         if not self.search_procedure_fn:
@@ -967,6 +1051,7 @@ Produce FULL analysis with assessment approach and origination method.
         rag_queries = [
             f"information requirements for {origination_method}",
             f"required data fields {assessment_approach} assessment",
+            f"annexes required {origination_method} information checklist",
         ]
 
         rag_results: dict[str, Any] = {}

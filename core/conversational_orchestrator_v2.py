@@ -1274,6 +1274,7 @@ I can help you draft credit packs through natural conversation.
                 analysis_text=analysis["full_analysis"],
                 assessment_approach=assessment_approach,
                 origination_method=origination_method,
+                identified_gaps=analysis.get("identified_gaps", []),
                 on_stream=on_agent_stream,
             )
 
