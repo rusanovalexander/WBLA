@@ -402,8 +402,9 @@ class Writer:
         if on_stream:
             result = call_llm_streaming(
                 prompt, MODEL_PRO, 0.0, 4000,
-                "Writer", self.tracer,
+                "Writer",
                 on_chunk=on_stream,
+                tracer=self.tracer,
                 thinking_budget=THINKING_BUDGET_LIGHT,
             )
         else:

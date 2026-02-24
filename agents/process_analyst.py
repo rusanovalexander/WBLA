@@ -681,8 +681,9 @@ class ProcessAnalyst:
         if on_stream:
             result = call_llm_streaming(
                 prompt, MODEL_PRO, 0.0, 8000,
-                "RequirementsDiscovery", self.tracer,
+                "RequirementsDiscovery",
                 on_chunk=on_stream,
+                tracer=self.tracer,
                 thinking_budget=THINKING_BUDGET_LIGHT,
             )
         else:
@@ -830,8 +831,9 @@ Produce FULL analysis with assessment approach and origination method.
             analysis = call_llm_streaming(
                 analysis_prompt,
                 AGENT_MODELS.get("process_analyst", MODEL_FLASH),
-                0.0, 16000, "ProcessAnalyst", self.tracer,
+                0.0, 16000, "ProcessAnalyst",
                 on_chunk=on_stream,
+                tracer=self.tracer,
                 thinking_budget=THINKING_BUDGET_STANDARD,
             )
         else:

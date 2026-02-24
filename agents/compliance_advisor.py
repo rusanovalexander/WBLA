@@ -630,9 +630,10 @@ Use ONLY the information from your RAG searches above when citing Guidelines lim
         if on_stream:
             assessment = call_llm_streaming(
                 assessment_prompt, AGENT_MODELS.get("compliance_advisor", MODEL_PRO),
-                0.0, 32000, "ComplianceAdvisor", self.tracer,
-                thinking_budget=THINKING_BUDGET_LIGHT,
+                0.0, 32000, "ComplianceAdvisor",
                 on_chunk=on_stream,
+                tracer=self.tracer,
+                thinking_budget=THINKING_BUDGET_LIGHT,
             )
         else:
             assessment = call_llm(
