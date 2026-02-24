@@ -1409,6 +1409,17 @@ I can help you draft credit packs through natural conversation.
         thinking.append("⏳ Running ComplianceAdvisor assessment...")
         thinking.append(f"📋 Checking {len(self.persistent_context['requirements'])} requirements...")
 
+        # Collect supplementary files (all uploaded docs that are NOT the teaser/example)
+        _comp_teaser_fn = self.persistent_context.get("teaser_filename")
+        _comp_example_fn = self.persistent_context.get("example_filename")
+        _comp_supplement_texts = {
+            fn: d["content"]
+            for fn, d in self.persistent_context.get("uploaded_files", {}).items()
+            if fn not in (_comp_teaser_fn, _comp_example_fn) and d.get("analyzed")
+        }
+        if _comp_supplement_texts:
+            thinking.append(f"📎 Passing {len(_comp_supplement_texts)} supplementary doc(s) to compliance check")
+
         thinking_parts: list[str] = []
         try:
             result_text, checks = self.advisor.assess_compliance(
@@ -1418,6 +1429,7 @@ I can help you draft credit packs through natural conversation.
                 use_native_tools=True,
                 on_stream=on_agent_stream,
                 on_thinking=thinking_parts.append,
+                supplement_texts=_comp_supplement_texts or None,
             )
 
             # Update context

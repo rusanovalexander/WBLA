@@ -417,6 +417,7 @@ class ComplianceAdvisor:
         use_native_tools: bool = True,
         on_stream: Callable[[str], None] | None = None,
         on_thinking: Callable[[str], None] | None = None,
+        supplement_texts: dict[str, str] | None = None,
     ) -> tuple[str, list[dict]]:
         """
         Complete compliance assessment including RAG search and extraction.
@@ -426,6 +427,7 @@ class ComplianceAdvisor:
             teaser_text: Original teaser document text
             extracted_data: Extracted analysis from ProcessAnalyst
             use_native_tools: Whether to use native function calling (vs text-based fallback)
+            supplement_texts: Optional dict of {filename: content} for supplementary docs
 
         Returns:
             Tuple of (compliance_analysis_text, list_of_compliance_checks)
@@ -448,11 +450,15 @@ class ComplianceAdvisor:
                 logger.warning("Native compliance tools failed: %s", e)
                 self.tracer.record("ComplianceAdvisor", "FALLBACK", str(e))
                 result_text = self._run_compliance_text_based(
-                    filled_data, teaser_text, extracted_data, on_stream=on_stream, on_thinking=on_thinking
+                    filled_data, teaser_text, extracted_data,
+                    on_stream=on_stream, on_thinking=on_thinking,
+                    supplement_texts=supplement_texts,
                 )
         else:
             result_text = self._run_compliance_text_based(
-                filled_data, teaser_text, extracted_data, on_stream=on_stream, on_thinking=on_thinking
+                filled_data, teaser_text, extracted_data,
+                on_stream=on_stream, on_thinking=on_thinking,
+                supplement_texts=supplement_texts,
             )
 
         # Extract structured compliance checks
@@ -531,6 +537,7 @@ Follow the OUTPUT_STRUCTURE from your instructions.
         extracted_data: str,
         on_stream: Callable[[str], None] | None = None,
         on_thinking: Callable[[str], None] | None = None,
+        supplement_texts: dict[str, str] | None = None,
     ) -> str:
         """Run compliance using text-based tool calls (fallback)."""
 
@@ -602,6 +609,19 @@ Each query should target a specific section, limit, or requirement.
 
         rag_context = format_rag_results(guideline_results)
 
+        # Build supplementary documents block (financial statements, market reports, etc.)
+        supplement_section = ""
+        if supplement_texts:
+            parts = []
+            for fname, ftext in supplement_texts.items():
+                parts.append(f"### {fname}\n{ftext[:3000]}")
+            supplement_section = (
+                "\n## ADDITIONAL SUPPORTING DOCUMENTS\n"
+                "Use data from these documents when checking compliance criteria "
+                "(e.g., LTV, DSCR, financial ratios from financial statements).\n\n"
+                + "\n\n".join(parts)
+            )
+
         # Final assessment with RAG context
         assessment_prompt = f"""{self.instruction}
 
@@ -615,7 +635,7 @@ Each query should target a specific section, limit, or requirement.
 
 ### Teaser:
 {teaser_text[:3000]}
-
+{supplement_section}
 ## GUIDELINES SEARCH RESULTS
 
 {rag_context}
