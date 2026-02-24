@@ -1,4 +1,4 @@
-Native tools failed (Native tools analysis did not produce a <RESULT_JSON> block — falling back to text-based analysis) — using text-based fallback
+Native tools failed (Native tools analysis did not call submit_analysis_result — falling back to text-based analysis) — using text-based fallback
 response.text was None or empty for ProcessAnalyst — possible pure tool-call response
 Native tools produced no structured decision — re-running text-based analysis
 response.text was None or empty for ProcessAnalyst — possible pure tool-call response
