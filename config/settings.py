@@ -8,10 +8,15 @@ Environment variables:
     DOCAI_PROCESSOR_ID: Document AI processor ID (optional)
 """
 
+import atexit
+import logging
 import os
 import json
 import tempfile
+import warnings
 from pathlib import Path
+
+_settings_logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -45,10 +50,12 @@ def _init_service_account_from_secrets() -> str | None:
             )
             json.dump(sa_info, tmp)
             tmp.close()
+            # SECURITY FIX: register cleanup so temp key file is deleted on process exit
+            atexit.register(os.unlink, tmp.name)
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
             return tmp.name
-    except Exception:
-        pass
+    except Exception as e:
+        _settings_logger.debug("SA init from Streamlit secrets failed: %s", e)
     return None
 
 
@@ -73,15 +80,23 @@ PRODUCT_AUDIENCE = _get_secret("PRODUCT_AUDIENCE", "decision committee")  # Targ
 # Google Cloud Configuration
 # =============================================================================
 
-PROJECT_ID = _get_secret("GOOGLE_CLOUD_PROJECT", "your-project-id")
+PROJECT_ID = _get_secret("GOOGLE_CLOUD_PROJECT", "")
+if not PROJECT_ID:
+    warnings.warn(
+        "GOOGLE_CLOUD_PROJECT is not set. Set it in your environment or Streamlit secrets. "
+        "All GCP API calls will fail until this is configured.",
+        stacklevel=1,
+    )
 
 # Locations
 LOCATION = _get_secret("LOCATION", "us")
 VERTEX_LOCATION = _get_secret("VERTEX_LOCATION", "us-central1")
 SEARCH_LOCATION = _get_secret("SEARCH_LOCATION", "global")
 
-# Authentication — prefer secrets-derived temp file, then env var, then local file
-KEY_PATH = _SECRETS_KEY_PATH or os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "auth_key.json")
+# Authentication — prefer secrets-derived temp file, then env var
+# NOTE: default is empty string, not a relative filename, to avoid accidentally loading
+# a stray auth_key.json from an unpredictable working directory.
+KEY_PATH = _SECRETS_KEY_PATH or os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
 
 # Document AI
 DOCAI_PROCESSOR_ID = _get_secret("DOCAI_PROCESSOR_ID", "")
@@ -93,8 +108,8 @@ DATA_STORE_ID = _get_secret("DATA_STORE_ID", "")
 # Models
 # =============================================================================
 
-MODEL_PRO = os.getenv("MODEL_PRO", "gemini-2.5-pro")  # Stable, fast, cost-effective
-MODEL_FLASH = os.getenv("MODEL_FLASH", "gemini-2.5-flash")  # Use same for consistency
+MODEL_PRO = _get_secret("MODEL_PRO", "gemini-2.5-pro")    # reads Streamlit secrets too
+MODEL_FLASH = _get_secret("MODEL_FLASH", "gemini-2.5-flash")  # reads Streamlit secrets too
 
 # Agent model assignments
 AGENT_MODELS = {
@@ -124,9 +139,15 @@ EXAMPLES_FOLDER = DATA_FOLDER / "examples"
 TEASERS_FOLDER = DATA_FOLDER / "teasers"
 OUTPUTS_FOLDER = BASE_DIR / "outputs"
 
-# Ensure directories exist
-for _folder in [PROCEDURE_FOLDER, GUIDELINES_FOLDER, EXAMPLES_FOLDER, TEASERS_FOLDER, OUTPUTS_FOLDER]:
-    _folder.mkdir(parents=True, exist_ok=True)
+# NOTE: directories are NOT created at import time (would break pytest in CI).
+# Call setup_environment() or ensure_data_dirs() explicitly at startup.
+_DATA_DIRS = [PROCEDURE_FOLDER, GUIDELINES_FOLDER, EXAMPLES_FOLDER, TEASERS_FOLDER, OUTPUTS_FOLDER]
+
+
+def ensure_data_dirs() -> None:
+    """Create all required data directories. Call this at application startup."""
+    for _folder in _DATA_DIRS:
+        _folder.mkdir(parents=True, exist_ok=True)
 
 # =============================================================================
 # RAG Document Type Detection Keywords (configurable)
@@ -141,9 +162,9 @@ DOC_TYPE_KEYWORDS = {
 # Feature Flags
 # =============================================================================
 
-VERBOSE_REASONING = os.getenv("VERBOSE_REASONING", "true").lower() == "true"
-ENABLE_STREAMING = os.getenv("ENABLE_STREAMING", "true").lower() == "true"
-REQUIRE_APPROVAL = os.getenv("REQUIRE_APPROVAL", "true").lower() == "true"
+VERBOSE_REASONING = _get_secret("VERBOSE_REASONING", "true").lower() == "true"
+ENABLE_STREAMING = _get_secret("ENABLE_STREAMING", "true").lower() == "true"
+REQUIRE_APPROVAL = _get_secret("REQUIRE_APPROVAL", "true").lower() == "true"
 
 # Max tokens for context
 MAX_CONTEXT_TOKENS = 100_000
@@ -214,13 +235,16 @@ def get_credentials():
 
 
 def setup_environment():
-    """Set up environment variables for Google Cloud."""
+    """Set up environment variables for Google Cloud and create data directories."""
     os.environ["GOOGLE_CLOUD_PROJECT"] = PROJECT_ID
     os.environ["GOOGLE_CLOUD_LOCATION"] = VERTEX_LOCATION
     os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
 
-    if os.path.exists(KEY_PATH):
+    if KEY_PATH and os.path.exists(KEY_PATH):
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = KEY_PATH
+
+    # Create data directories (moved here from module-level to avoid import-time side effects)
+    ensure_data_dirs()
 
 
 def validate_config() -> dict[str, bool]:
@@ -235,7 +259,7 @@ def validate_config() -> dict[str, bool]:
         pass
 
     status = {
-        "project_id": bool(PROJECT_ID and PROJECT_ID != "your-project-id"),
+        "project_id": bool(PROJECT_ID),
         "credentials": has_credentials,
         "data_store": bool(DATA_STORE_ID),
         "docai_processor": bool(DOCAI_PROCESSOR_ID),

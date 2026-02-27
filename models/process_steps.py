@@ -8,9 +8,12 @@ so the user can "go back" and re-run from that point with additional instruction
 from __future__ import annotations
 
 import copy
+import logging
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+_logger = logging.getLogger(__name__)
 
 
 # Keys we snapshot/restore for replay (subset of persistent_context)
@@ -40,7 +43,13 @@ def snapshot_context(context: dict[str, Any]) -> dict[str, Any]:
         if key in context:
             try:
                 out[key] = copy.deepcopy(context[key])
-            except Exception:
+            except Exception as e:
+                # Warn so developers know the snapshot is shallow for this key.
+                # A shallow copy means mutating the restored context could corrupt the snapshot.
+                _logger.warning(
+                    "snapshot_context: deepcopy failed for key '%s' (%s: %s); using shallow copy",
+                    key, type(context[key]).__name__, e
+                )
                 out[key] = context[key]  # fallback shallow
     return out
 
@@ -51,7 +60,11 @@ def restore_context(target: dict[str, Any], snapshot: dict[str, Any]) -> None:
         if key in snapshot:
             try:
                 target[key] = copy.deepcopy(snapshot[key])
-            except Exception:
+            except Exception as e:
+                _logger.warning(
+                    "restore_context: deepcopy failed for key '%s' (%s: %s); using shallow copy",
+                    key, type(snapshot[key]).__name__, e
+                )
                 target[key] = snapshot[key]
 
 
@@ -66,5 +79,4 @@ class ProcessStepRecord(BaseModel):
     response_preview: str = ""  # first ~200 chars for timeline list
     context_after: dict[str, Any] = Field(default_factory=dict)  # checkpoint for replay
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)

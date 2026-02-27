@@ -186,23 +186,19 @@ def _safe_struct_to_dict(struct_data) -> dict:
     except Exception as e:
         logger.warning("_safe_struct_to_dict: Method 2 (to_json) FAILED: %s", e)
 
-    # Method 3: Iterate keys individually with recursion protection
+    # Method 3: Attempt dict() with a bounded depth guard via _convert_proto_to_dict.
+    # We do NOT use sys.setrecursionlimit — it is a global, process-wide setting and
+    # is NOT thread-safe (lowering it can cause spurious RecursionErrors in other threads).
     try:
-        import sys
-        old_limit = sys.getrecursionlimit()
-        sys.setrecursionlimit(200)  # Low limit to fail fast instead of stack overflow
-        try:
-            native = dict(struct_data)
-            result = _convert_proto_to_dict(native)
-            if isinstance(result, dict):
-                logger.debug("_safe_struct_to_dict: Method 3 (dict+convert) returned %d keys", len(result))
-                return result
-            return {}
-        except RecursionError:
-            logger.warning("_safe_struct_to_dict: Method 3 RecursionError, using string fallback")
-            return {"_raw": str(struct_data)[:2000]}
-        finally:
-            sys.setrecursionlimit(old_limit)
+        native = dict(struct_data)
+        result = _convert_proto_to_dict(native, max_depth=10)
+        if isinstance(result, dict):
+            logger.debug("_safe_struct_to_dict: Method 3 (dict+convert, bounded) returned %d keys", len(result))
+            return result
+        return {}
+    except RecursionError:
+        logger.warning("_safe_struct_to_dict: Method 3 RecursionError even with bounded depth")
+        return {"_raw": str(struct_data)[:2000]}
     except Exception as e:
         logger.warning("_safe_struct_to_dict: ALL methods FAILED: %s (type=%s)", e, type(struct_data).__name__)
         return {}
@@ -452,13 +448,14 @@ def search_rag(query: str, num_results: int = 5) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        import traceback
+        # Log full traceback server-side; only return the message to callers to avoid
+        # leaking internal paths and GCP resource identifiers to the UI.
+        logger.exception("search_rag failed for query='%s': %s", query[:80], e)
         return {
             "status": "ERROR",
             "query": query,
             "results": [],
             "error": str(e),
-            "traceback": traceback.format_exc()
         }
 
 
@@ -581,7 +578,7 @@ def tool_search_examples(
     examples_path = Path(examples_folder)
 
     if not examples_path.exists():
-        logger.warning(f"Examples folder not found: {examples_folder}")
+        logger.warning("Examples folder not found: %s", examples_folder)
         return {
             "status": "ERROR",
             "error": f"Examples folder not found: {examples_folder}",
@@ -598,7 +595,7 @@ def tool_search_examples(
         example_files.extend(examples_path.glob(f"**/*{ext}"))
 
     if not example_files:
-        logger.info(f"No example files found in {examples_folder}")
+        logger.info("No example files found in %s", examples_folder)
         return {
             "status": "OK",
             "num_results": 0,
@@ -657,7 +654,7 @@ def tool_search_examples(
                     if term in content_lower:
                         score += 1.0
         except Exception as e:
-            logger.debug(f"Could not read {filename}: {e}")
+            logger.debug("Could not read %s: %s", filename, e)
 
         # Extract title from filename (remove extension, replace underscores/hyphens)
         title = file_path.stem.replace("_", " ").replace("-", " ").title()
@@ -677,7 +674,7 @@ def tool_search_examples(
     # Return top N results
     top_results = scored_examples[:num_results]
 
-    logger.info(f"Example search: '{query}' found {len(top_results)}/{len(scored_examples)} relevant examples")
+    logger.info("Example search: '%s' found %d/%d relevant examples", query, len(top_results), len(scored_examples))
 
     return {
         "status": "OK",

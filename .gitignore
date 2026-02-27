@@ -17,6 +17,8 @@ build/
 *credential*.json
 *service-account*.json
 *key*.json
+# Temp SA key files written by _init_service_account_from_secrets()
+gcp_sa_*.json
 
 # IDE
 .vscode/

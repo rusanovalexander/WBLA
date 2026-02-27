@@ -10,18 +10,14 @@ from typing import Dict, List, Optional, Any
 import json
 import copy
 
+from models.schemas import WorkflowPhase
+
 
 class PhaseManager:
     """Manages workflow phases with state snapshots for navigation."""
-    
-    PHASES = [
-        "SETUP",
-        "ANALYSIS",
-        "PROCESS_GAPS",
-        "COMPLIANCE",
-        "DRAFTING",
-        "COMPLETE"
-    ]
+
+    # Single source of truth: derived from WorkflowPhase enum (no manual sync needed)
+    PHASES: List[str] = [p.value for p in WorkflowPhase]
     
     def __init__(self):
         self.current_phase = "SETUP"

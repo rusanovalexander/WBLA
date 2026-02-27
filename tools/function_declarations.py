@@ -9,7 +9,7 @@ Key changes:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 
 def get_tool_declarations(governance_context: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -186,7 +186,7 @@ def create_tool_executor(
     search_procedure_fn,
     search_guidelines_fn,
     search_rag_fn,
-) -> callable:
+) -> Callable[[str, dict], str]:
     """
     Create a tool executor function that routes native function calls
     to the appropriate tool implementation.

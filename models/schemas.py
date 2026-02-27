@@ -55,6 +55,19 @@ class ChangeType(str, Enum):
     FILE_ANALYSIS_ACCEPTED = "file_analysis_accepted"
 
 
+class PriorityLevel(str, Enum):
+    """Priority levels for requirements and discovered fields."""
+    CRITICAL = "CRITICAL"
+    IMPORTANT = "IMPORTANT"
+    SUPPORTING = "SUPPORTING"
+
+
+class SeverityLevel(str, Enum):
+    """Compliance severity levels (MUST = mandatory, SHOULD = recommended)."""
+    MUST = "MUST"
+    SHOULD = "SHOULD"
+
+
 # =============================================================================
 # Agent Communication
 # =============================================================================
@@ -133,7 +146,7 @@ class Requirement(BaseModel):
     description: str = ""
     why_required: str = ""
     typical_source: str = "teaser"
-    priority: str = "IMPORTANT"  # CRITICAL, IMPORTANT, SUPPORTING
+    priority: PriorityLevel = PriorityLevel.IMPORTANT
     status: RequirementStatus = RequirementStatus.PENDING
     value: str = ""
     source: str = ""
@@ -154,7 +167,7 @@ class ComplianceCheck(BaseModel):
     status: ComplianceStatus = ComplianceStatus.REVIEW
     evidence: str = ""
     reference: str = ""
-    severity: str = "MUST"  # MUST or SHOULD
+    severity: SeverityLevel = SeverityLevel.MUST
 
 
 # =============================================================================
@@ -267,7 +280,7 @@ class DiscoveredField(BaseModel):
     why_required: str = ""
     data_type: str = "text"
     typical_source: str = "teaser"
-    priority: str = "IMPORTANT"
+    priority: PriorityLevel = PriorityLevel.IMPORTANT
 
 
 class FieldGroup(BaseModel):

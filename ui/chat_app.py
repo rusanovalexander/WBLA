@@ -24,11 +24,20 @@ from config.settings import setup_environment, VERSION, PRODUCT_NAME
 setup_environment()
 
 # Import v2 orchestrator with modern features
+import logging as _logging
+_chat_logger = _logging.getLogger(__name__)
+
 try:
     from core.conversational_orchestrator_v2 import ConversationalOrchestratorV2 as ConversationalOrchestrator
+    _USING_V2_ORCHESTRATOR = True
 except ImportError:
-    # Fallback to v1 if v2 not available
-    from core.conversational_orchestrator import ConversationalOrchestrator
+    # Fallback to v1 — warn loudly so this degradation is visible in logs.
+    _chat_logger.warning(
+        "ConversationalOrchestratorV2 not found; falling back to v1. "
+        "Some features (step history, replay, sources tracking) will be unavailable."
+    )
+    from core.conversational_orchestrator import ConversationalOrchestrator  # type: ignore[assignment]
+    _USING_V2_ORCHESTRATOR = False
 
 
 def init_session_state():
@@ -263,8 +272,8 @@ def render_sidebar():
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                 use_container_width=True,
                             )
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        st.error(f"Cannot open export file: {_e}")
                     if st.button("🔄 Regenerate DOCX", key="regen_docx"):
                         st.session_state["_chat_docx_path"] = None
                         st.rerun()
@@ -590,7 +599,24 @@ def render_chat():
                 steps_container = st.empty()   # thinking steps rendered here
                 stream_placeholder = st.empty()  # live token stream rendered here
 
+            _poll_start = time.time()
+            _POLL_TIMEOUT = 300  # 5-minute wall-clock timeout guards against stuck threads
+
             while not shared["done"] or not thinking_queue.empty():
+                # Safety: exit the loop if the thread appears stuck
+                if time.time() - _poll_start > _POLL_TIMEOUT:
+                    _chat_logger.error("Orchestrator thread timed out after %ds", _POLL_TIMEOUT)
+                    shared["done"] = True
+                    shared["result"] = shared["result"] or {
+                        "response": "❌ Request timed out. Please try again.",
+                        "thinking": ["❌ Timed out"],
+                        "requires_approval": False,
+                        "next_suggestion": None,
+                        "agent_communication": None,
+                        "sources_used": {},
+                    }
+                    break
+
                 updated = False
                 while True:
                     try:
@@ -641,7 +667,15 @@ def render_chat():
 
                 time.sleep(0.1)
 
-            result = shared["result"]
+            # None-guard: result may be None if thread was killed before assignment
+            result = shared["result"] or {
+                "response": "❌ No response received. Please try again.",
+                "thinking": [],
+                "requires_approval": False,
+                "next_suggestion": None,
+                "agent_communication": None,
+                "sources_used": {},
+            }
 
             # Display response
             st.markdown(result["response"])

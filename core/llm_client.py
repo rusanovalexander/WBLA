@@ -23,7 +23,7 @@ from tenacity import (
 )
 
 from config.settings import (
-    PROJECT_ID, MODEL_PRO, ENABLE_STREAMING,
+    PROJECT_ID, VERTEX_LOCATION, MODEL_PRO, ENABLE_STREAMING,
     ENABLE_VERTEX_TRACE, TRACE_SAMPLING_RATE
 )
 from core.tracing import (
@@ -47,7 +47,7 @@ def _get_client():
     if "client" not in _client_cache:
         from google import genai
         _client_cache["client"] = genai.Client(
-            vertexai=True, project=PROJECT_ID, location="us-central1"
+            vertexai=True, project=PROJECT_ID, location=VERTEX_LOCATION
         )
         logger.info("Created singleton genai.Client for project=%s", PROJECT_ID)
     return _client_cache["client"]
@@ -430,6 +430,12 @@ def call_llm_with_backoff(
 ) -> LLMCallResult:
     """
     Call LLM with exponential backoff for rate limit errors (429).
+
+    .. deprecated::
+        ``call_llm`` already retries via tenacity (up to 10 attempts with exponential
+        backoff). This wrapper adds a second retry loop on top and is redundant.
+        Prefer calling ``call_llm`` directly. This function is retained for backward
+        compatibility only and will be removed in a future version.
 
     FIXED: call_llm() catches exceptions internally and returns LLMCallResult(success=False),
     so we detect rate limits from the error message string instead of catching exceptions.

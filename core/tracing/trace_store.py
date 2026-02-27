@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextvars
 import logging
 import os
+import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -28,8 +29,13 @@ from models.schemas import AgentTraceEntry
 # Cost Estimation (approximate, for demo visibility)
 # =============================================================================
 
-# Approximate per-token costs (USD) — update as pricing changes
+# Approximate per-token costs (USD) — update as pricing changes.
+# Keys MUST match the model names used in config/settings.py (MODEL_PRO / MODEL_FLASH).
 MODEL_COSTS = {
+    # Current stable model names (as of 2026-Q1)
+    "gemini-2.5-pro": {"input": 1.25 / 1_000_000, "output": 10.0 / 1_000_000},
+    "gemini-2.5-flash": {"input": 0.15 / 1_000_000, "output": 0.60 / 1_000_000},
+    # Legacy preview model names (kept for backward compatibility)
     "gemini-2.5-pro-preview-05-06": {"input": 1.25 / 1_000_000, "output": 10.0 / 1_000_000},
     "gemini-2.5-flash-preview-04-17": {"input": 0.15 / 1_000_000, "output": 0.60 / 1_000_000},
     # Fallback for unknown models
@@ -65,6 +71,7 @@ class TraceStore:
     def __init__(self):
         self.entries: list[AgentTraceEntry] = []
         self.active_agent: str | None = None
+        self._lock = threading.Lock()  # Guards all mutable state for thread safety
         self._session_start = datetime.now()
         self._total_cost: float = 0.0
         self._total_tokens_in: int = 0
@@ -77,12 +84,19 @@ class TraceStore:
         """Try to initialize Langfuse if credentials are available."""
         try:
             if os.getenv("LANGFUSE_PUBLIC_KEY"):
+                if not os.getenv("LANGFUSE_SECRET_KEY"):
+                    logger.warning(
+                        "LANGFUSE_PUBLIC_KEY is set but LANGFUSE_SECRET_KEY is missing. "
+                        "Langfuse observability will be disabled."
+                    )
+                    return
                 from langfuse import Langfuse
                 self._langfuse = Langfuse()
+                logger.info("Langfuse observability initialized.")
         except ImportError:
             pass
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Langfuse init failed: %s", e)
 
     def record(
         self,
@@ -95,7 +109,7 @@ class TraceStore:
         duration_ms: int = 0,
         model: str = "",
     ) -> AgentTraceEntry:
-        """Record a trace entry."""
+        """Record a trace entry (thread-safe)."""
         entry = AgentTraceEntry(
             agent=agent,
             action=action,
@@ -106,25 +120,27 @@ class TraceStore:
             duration_ms=duration_ms,
             model=model,
         )
-        self.entries.append(entry)
-        # Trim oldest entries when cap exceeded to prevent unbounded memory growth
-        if len(self.entries) > self.MAX_ENTRIES:
-            self.entries = self.entries[-self.MAX_ENTRIES:]
 
-        # Update totals
-        self._total_cost += cost_usd
-        self._total_tokens_in += tokens_in
-        self._total_tokens_out += tokens_out
-        if action == "LLM_CALL":
-            self._total_calls += 1
+        with self._lock:
+            self.entries.append(entry)
+            # Trim oldest entries when cap exceeded to prevent unbounded memory growth
+            if len(self.entries) > self.MAX_ENTRIES:
+                self.entries = self.entries[-self.MAX_ENTRIES:]
 
-        # Track active agent
-        if action in ("START", "CALLING", "LLM_CALL"):
-            self.active_agent = agent
-        elif action in ("COMPLETE", "ERROR"):
-            self.active_agent = None
+            # Update totals
+            self._total_cost += cost_usd
+            self._total_tokens_in += tokens_in
+            self._total_tokens_out += tokens_out
+            if action == "LLM_CALL":
+                self._total_calls += 1
 
-        # Forward to Langfuse if available
+            # Track active agent
+            if action in ("START", "CALLING", "LLM_CALL"):
+                self.active_agent = agent
+            elif action in ("COMPLETE", "ERROR"):
+                self.active_agent = None
+
+        # Forward to Langfuse outside lock (network I/O should not block other threads)
         if self._langfuse and action == "LLM_CALL":
             try:
                 self._langfuse.generation(
@@ -185,26 +201,31 @@ class TraceStore:
 
     @property
     def total_cost(self) -> float:
-        return self._total_cost
+        with self._lock:
+            return self._total_cost
 
     @property
     def total_tokens(self) -> tuple[int, int]:
-        return self._total_tokens_in, self._total_tokens_out
+        with self._lock:
+            return self._total_tokens_in, self._total_tokens_out
 
     @property
     def total_calls(self) -> int:
-        return self._total_calls
+        with self._lock:
+            return self._total_calls
 
     def get_entries(self, last_n: int = 0) -> list[AgentTraceEntry]:
-        """Get trace entries, optionally last N."""
+        """Get a snapshot of trace entries (thread-safe), optionally last N."""
+        with self._lock:
+            snapshot = list(self.entries)
         if last_n > 0:
-            return self.entries[-last_n:]
-        return self.entries
+            return snapshot[-last_n:]
+        return snapshot
 
     def get_agent_summary(self) -> dict[str, dict[str, Any]]:
-        """Get per-agent summary statistics."""
+        """Get per-agent summary statistics (thread-safe snapshot)."""
         summary: dict[str, dict[str, Any]] = {}
-        for entry in self.entries:
+        for entry in self.get_entries():
             if entry.agent not in summary:
                 summary[entry.agent] = {
                     "calls": 0, "tokens_in": 0, "tokens_out": 0,
@@ -220,18 +241,23 @@ class TraceStore:
         return summary
 
     def format_for_export(self) -> str:
-        """Format trace for audit trail export."""
+        """Format trace for audit trail export (thread-safe snapshot)."""
+        with self._lock:
+            calls = self._total_calls
+            tokens_in = self._total_tokens_in
+            tokens_out = self._total_tokens_out
+            cost = self._total_cost
         lines = [
             "=" * 70,
             "AGENT ACTIVITY TRACE",
             f"Session started: {self._session_start.isoformat()}",
-            f"Total LLM calls: {self._total_calls}",
-            f"Total tokens: {self._total_tokens_in:,} in / {self._total_tokens_out:,} out",
-            f"Estimated cost: ${self._total_cost:.4f}",
+            f"Total LLM calls: {calls}",
+            f"Total tokens: {tokens_in:,} in / {tokens_out:,} out",
+            f"Estimated cost: ${cost:.4f}",
             "=" * 70,
             "",
         ]
-        for entry in self.entries:
+        for entry in self.get_entries():
             cost_str = f" [${entry.cost_usd:.4f}]" if entry.cost_usd > 0 else ""
             time_str = f" [{entry.duration_ms}ms]" if entry.duration_ms > 0 else ""
             lines.append(
@@ -242,13 +268,14 @@ class TraceStore:
         return "\n".join(lines)
 
     def clear(self):
-        """Clear all trace entries."""
-        self.entries.clear()
-        self._total_cost = 0.0
-        self._total_tokens_in = 0
-        self._total_tokens_out = 0
-        self._total_calls = 0
-        self.active_agent = None
+        """Clear all trace entries (thread-safe)."""
+        with self._lock:
+            self.entries.clear()
+            self._total_cost = 0.0
+            self._total_tokens_in = 0
+            self._total_tokens_out = 0
+            self._total_calls = 0
+            self.active_agent = None
 
 
 # =============================================================================
